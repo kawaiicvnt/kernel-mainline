@@ -14,31 +14,84 @@
  * side effect of the *.o build rule.
  */
 
-#ifdef CONFIG_64BIT
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 8				ASM_NL	\
-	.quad sym
+#ifndef __ASSEMBLY__
+#if defined(MODULE) && !defined(CONFIG_INTEGRATE_MODULES)
+extern struct module __this_module;
+#define THIS_MODULE (&__this_module)
 #else
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 4				ASM_NL	\
-	.long sym
+#define THIS_MODULE ((struct module *)0)
 #endif
 
+#ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
+#include <linux/compiler.h>
 /*
- * LLVM integrated assembler cam merge adjacent string literals (like
- * C and GNU-as) passed to '.ascii', but not to '.asciz' and chokes on:
- *
- *   .asciz "MODULE_" "kvm" ;
+ * Emit the ksymtab entry as a pair of relative references: this reduces
+ * the size by half on 64-bit architectures, and eliminates the need for
+ * absolute relocations that require runtime processing on relocatable
+ * kernels.
  */
-#define ___EXPORT_SYMBOL(sym, license, ns...)		\
-	.section ".export_symbol","a"		ASM_NL	\
-	__export_symbol_##sym:			ASM_NL	\
-		.asciz license			ASM_NL	\
-		.ascii ns "\0"			ASM_NL	\
-		__EXPORT_SYMBOL_REF(sym)	ASM_NL	\
-	.previous
+#define __KSYMTAB_ENTRY(sym, sec)					\
+	__ADDRESSABLE(sym)						\
+	asm("	.section \"___ksymtab" sec "+" #sym "\", \"a\"	\n"	\
+	    "	.balign	4					\n"	\
+	    "__ksymtab_" #sym ":				\n"	\
+	    "	.long	" #sym "- .				\n"	\
+	    "	.long	__kstrtab_" #sym "- .			\n"	\
+	    "	.long	__kstrtabns_" #sym "- .			\n"	\
+	    "	.previous					\n")
 
-#if defined(__DISABLE_EXPORTS)
+struct kernel_symbol {
+	int value_offset;
+	int name_offset;
+	int namespace_offset;
+};
+#else
+#define __KSYMTAB_ENTRY(sym, sec)					\
+	static const struct kernel_symbol __ksymtab_##sym		\
+	__attribute__((section("___ksymtab" sec "+" #sym), used))	\
+	__aligned(sizeof(void *))					\
+	= { (unsigned long)&sym, __kstrtab_##sym, __kstrtabns_##sym }
+
+struct kernel_symbol {
+	unsigned long value;
+	const char *name;
+	const char *namespace;
+};
+#endif
+
+#ifdef __GENKSYMS__
+
+#define ___EXPORT_SYMBOL(sym, sec, ns)	__GENKSYMS_EXPORT_SYMBOL(sym)
+
+#else
+
+/*
+ * For every exported symbol, do the following:
+ *
+ * - Put the name of the symbol and namespace (empty string "" for none) in
+ *   __ksymtab_strings.
+ * - Place a struct kernel_symbol entry in the __ksymtab section.
+ *
+ * note on .section use: we specify progbits since usage of the "M" (SHF_MERGE)
+ * section flag requires it. Use '%progbits' instead of '@progbits' since the
+ * former apparently works on all arches according to the binutils source.
+ */
+#define ___EXPORT_SYMBOL(sym, sec, ns)						\
+	extern typeof(sym) sym;							\
+	extern const char __kstrtab_##sym[];					\
+	extern const char __kstrtabns_##sym[];					\
+	asm("	.section \"__ksymtab_strings\",\"aMS\",%progbits,1	\n"	\
+	    "__kstrtab_" #sym ":					\n"	\
+	    "	.asciz 	\"" #sym "\"					\n"	\
+	    "__kstrtabns_" #sym ":					\n"	\
+	    "	.asciz 	\"" ns "\"					\n"	\
+	    "	.previous						\n");	\
+	__KSYMTAB_ENTRY(sym, sec)
+
+#endif
+
+#if !defined(CONFIG_MODULES) || defined(__DISABLE_EXPORTS) || \
+    defined(CONFIG_INTEGRATE_MODULES)
 
 /*
  * Allow symbol exports to be disabled completely so that C code may

@@ -1,4 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0
+ifeq ($(CONFIG_INTEGRATE_MODULES),y)
+# Add obj-m targets except for modules.order to obj-y
+obj-y += $(filter-out %/modules.order, $(obj-m))
+endif
+
+ifeq ($(CONFIG_INTEGRATE_MODULES),y)
+# Include -m composite objects
+multi-obj-y := $(call multi-search, $(obj-y), .o, -objs -y -m)
+else
+endif
+ifeq ($(CONFIG_INTEGRATE_MODULES),y)
+# Include -m real objects
+real-obj-y := $(call real-search, $(obj-y), .o, -objs -y -m)
+else
+endif
 
 # Finds the multi-part object the current object will be linked into.
 # If the object belongs to two or more multi-part objects, list them all.
@@ -10,6 +25,9 @@ __modname = $(or $(modname-multi),$(basetarget))
 modname = $(subst $(space),:,$(__modname))
 modfile = $(addprefix $(obj)/,$(__modname))
 
+# Indicate whether this is a module or just an object shared by multiple modules
+is_module = $(if $(findstring :,$(modname)),0,1)
+
 # target with $(obj)/ and its suffix stripped
 target-stem = $(basename $(patsubst $(obj)/%,%,$@))
 
@@ -20,7 +38,8 @@ name-fix-token = $(subst $(comma),_,$(subst -,_,$1))
 name-fix = $(call stringify,$(call name-fix-token,$1))
 basename_flags = -DKBUILD_BASENAME=$(call name-fix,$(basetarget))
 modname_flags  = -DKBUILD_MODNAME=$(call name-fix,$(modname)) \
-		 -D__KBUILD_MODNAME=$(call name-fix-token,$(modname))
+		 -D__KBUILD_MODNAME=$(call name-fix-token,$(modname)) \
+		 -DKBUILD_IS_MODULE=$(is_module)
 modfile_flags  = -DKBUILD_MODFILE=$(call stringify,$(modfile))
 
 _c_flags       = $(filter-out $(CFLAGS_REMOVE_$(target-stem).o), \
