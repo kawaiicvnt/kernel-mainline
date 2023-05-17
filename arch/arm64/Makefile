@@ -106,7 +106,9 @@ else
   asm-arch := armv8.4-a
 endif
 
-ifdef asm-arch
+ifdef CONFIG_SOC_GS201
+KBUILD_CFLAGS	+= $(call cc-option,-mcpu=cortex-a76.cortex-a55)
+else ifdef asm-arch
 KBUILD_CFLAGS	+= -Wa,-march=$(asm-arch) \
 		   -DARM64_ASM_ARCH='"$(asm-arch)"'
 endif
