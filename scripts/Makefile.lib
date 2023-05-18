@@ -324,7 +324,7 @@ quiet_cmd_touch = TOUCH   $(call normalize_path,$@)
 # ---------------------------------------------------------------------------
 
 quiet_cmd_ld = LD      $@
-      cmd_ld = $(LD) $(ld_flags) $(real-prereqs) -o $@
+      cmd_ld = $(LDFINAL) $(ld_flags) $(real-prereqs) -o $@
 
 # Archive
 # ---------------------------------------------------------------------------
