@@ -159,7 +159,7 @@ $(obj)/config_data.gz: $(obj)/config_data FORCE
 
 filechk_cat = cat $<
 
-$(obj)/config_data: $(KCONFIG_CONFIG) FORCE
+$(obj)/config_data: arch/arm64/configs/gki-stock_defconfig FORCE
 	$(call filechk,cat)
 
 # kheaders_data.tar.xz
