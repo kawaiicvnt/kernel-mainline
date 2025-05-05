@@ -263,7 +263,7 @@ void debugfs_leave_cancellation(struct file *file,
 static inline struct dentry *debugfs_lookup(const char *name,
 					    struct dentry *parent)
 {
-	return ERR_PTR(-ENODEV);
+	return NULL;
 }
 
 static inline struct dentry *debugfs_create_file_aux(const char *name,
