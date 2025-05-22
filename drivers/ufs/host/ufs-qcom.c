@@ -1414,6 +1414,9 @@ static int ufs_qcom_set_clk_40ns_cycles(struct ufs_hba *hba,
 	case UNIPRO_CORE_CLK_FREQ_201_5_MHZ:
 		cycles_in_40ns = 8;
 		break;
+	case UNIPRO_CORE_CLK_FREQ_200_MHZ:
+		cycles_in_40ns = 8;
+		break;
 	case UNIPRO_CORE_CLK_FREQ_150_MHZ:
 		cycles_in_40ns = 6;
 		break;
@@ -1422,6 +1425,9 @@ static int ufs_qcom_set_clk_40ns_cycles(struct ufs_hba *hba,
 		break;
 	case  UNIPRO_CORE_CLK_FREQ_75_MHZ:
 		cycles_in_40ns = 3;
+		break;
+	case  UNIPRO_CORE_CLK_FREQ_50_MHZ:
+		cycles_in_40ns = 2;
 		break;
 	case UNIPRO_CORE_CLK_FREQ_37_5_MHZ:
 		cycles_in_40ns = 2;
@@ -2177,6 +2183,7 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		gear = UFS_HS_G5;
 		break;
 	case 300000000:
+	case 200000000:
 		gear = UFS_HS_G4;
 		break;
 	case 201500000:
@@ -2187,6 +2194,7 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		gear = UFS_HS_G2;
 		break;
 	case 75000000:
+	case 50000000:
 	case 37500000:
 		gear = UFS_HS_G1;
 		break;
