@@ -65,6 +65,29 @@
 		constant-charge-current-max-microamp = <16000000>;
 		constant-charge-voltage-max-microvolt = <4740000>;
 	};
+
+	avdd_ts: regulator-avdd-ts {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_avdd_ts";
+
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+
+		gpio = <&pio 53 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	iovdd_ts: regulator-iovdd-ts {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_iovdd_ts";
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+
+		gpio = <&pio 157 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
 	disp_vddi: regulator-disp-vddi {
 		compatible = "regulator-fixed";
 		regulator-name = "vreg_disp_vddi";
@@ -132,6 +155,39 @@
 
 &dsi0 {
 	status = "disabled";
+};
+
+&spi1 {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi1_pins>;
+
+	/* There are two variants of touchscreen
+	 * focaltech found in CSOT panel variant (42)
+	 * goodix found in Visionox panel variant (41) */
+
+	touchscreen@0 {
+		/* ft3683g */
+		compatible = "focaltech,ft3680";
+		reg = <0x0>;
+
+		spi-max-frequency = <6000000>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <9 0x2001>;
+		reset-gpios = <&pio 152 GPIO_ACTIVE_HIGH>;
+		focaltech,irq-gpio = <&pio 9 0x2001>;
+		focaltech,display-coords = <0 0 (1080*16) (2400*16)>;
+		focaltech,max-touch-number = <10>;
+
+		vdd-supply = <&avdd_ts>;
+		iovdd-supply = <&iovdd_ts>;
+
+		firmware-name = "focaltech/ft3683g_emerald.bin";
+	};
+
+	/* goodix,9916r */
 };
 
 &i2c2 {
