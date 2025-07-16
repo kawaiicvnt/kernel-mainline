@@ -154,7 +154,31 @@
 };
 
 &dsi0 {
-	status = "disabled";
+	status = "okay";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	panel: panel@0 {
+		compatible = "xiaomi,emerald-ft3683g-csot";
+		reg = <0>;
+
+		reset-gpios = <&pio 85 GPIO_ACTIVE_HIGH>;
+
+		vddi-supply = <&disp_vddi>;
+		vdd-supply = <&disp_vdd>;
+		vci-supply = <&disp_vci>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+};
+
+&dsi0_out {
+	remote-endpoint = <&panel_in>;
 };
 
 &spi1 {
