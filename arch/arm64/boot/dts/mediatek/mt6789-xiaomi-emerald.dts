@@ -35,6 +35,8 @@
 			height = <2400>;
 			stride = <((1080 + 8) * 4)>;
 			format = "a8r8g8b8";
+
+			panel = <&panel>;
 		};
 	};
 
@@ -168,6 +170,9 @@
 		vddi-supply = <&disp_vddi>;
 		vdd-supply = <&disp_vdd>;
 		vci-supply = <&disp_vci>;
+
+		width-mm = <70>;
+		height-mm = <155>;
 
 		port {
 			panel_in: endpoint {
