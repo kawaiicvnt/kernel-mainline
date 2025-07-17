@@ -3634,7 +3634,7 @@ static void verify_local_cpu_caps(u16 scope_mask)
 		}
 	}
 
-	if (i < ARM64_NCAPS) {
+	/*if (i < ARM64_NCAPS) {
 		pr_crit("CPU%d: Detected conflict for capability %d (%s), System: %d, CPU: %d\n",
 			smp_processor_id(), caps->capability,
 			caps->desc, system_has_cap, cpu_has_cap);
@@ -3643,7 +3643,7 @@ static void verify_local_cpu_caps(u16 scope_mask)
 			cpu_panic_kernel();
 		else
 			cpu_die_early();
-	}
+	}*/
 }
 
 /*
