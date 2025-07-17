@@ -844,7 +844,9 @@
 		smi_sub_comm_img0: smi@1502f000 {
 			compatible = "mediatek,mt6789-smi-sub-common";
 			reg = <0 0x1502f000 0 0x1000>;
-			mediatek,smi = <&smi_sub_comm_img1>;
+			//mediatek,smi = <&smi_sub_comm_img1>;
+			// HACK: iommu driver doesn't support tri-level sub-commons for now
+			mediatek,smi = <&smi_common_disp>;
 			power-domains = <&spm MT6789_POWER_DOMAIN_ISP>;
 			clocks = <&imgsys CLK_IMGSYS_LARB9>,
 			         <&imgsys CLK_IMGSYS_LARB10>,
@@ -856,7 +858,9 @@
 		smi_sub_comm_ipe: smi@1b00e000 {
 			compatible = "mediatek,mt6789-smi-sub-common";
 			reg = <0 0x1b00e000 0 0x1000>;
-			mediatek,smi = <&smi_sub_comm_img1>;
+			//mediatek,smi = <&smi_sub_comm_img1>;
+			// HACK: iommu driver doesn't support tri-level sub-commons for now
+			mediatek,smi = <&smi_common_disp>;
 			power-domains = <&spm MT6789_POWER_DOMAIN_IPE>;
 			clocks = <&ipesys CLK_IPE_SMI_SUBCOM>,
 			         <&ipesys CLK_IPE_SMI_SUBCOM>,
@@ -902,7 +906,7 @@
 			clock-names = "apb", "smi", "gals0", "gals1";
 		};
 
-		iommu0: iommu@14016000 {
+		/*iommu0: iommu@14016000 {
 			compatible = "mediatek,mt6789-m4u";
 			reg = <0 0x14016000 0 0x1000>;
 			interrupts = <GIC_SPI 303 IRQ_TYPE_LEVEL_HIGH &ppi_cluster0>;
@@ -914,7 +918,7 @@
 			clocks = <&mmsys CLK_MM_SMI_IOMMU>;
 			clock-names = "bclk";
 			#iommu-cells = <1>;
-		};
+		};*/
 
 		larb1: smi@14004000 {
 			compatible = "mediatek,mt6789-smi-larb";
@@ -1122,8 +1126,8 @@
 			power-domains = <&spm MT6789_POWER_DOMAIN_DISP>;
 			clocks = <&mmsys CLK_MM_DISP_OVL0>;
 			mediatek,gce-client-reg = <&gce0 SUBSYS_1400XXXX 0x5000 0x1000>;
-			iommus = <&iommu0 M4U_PORT_L0_OVL_RDMA0>,
-			         <&iommu0 M4U_PORT_L0_OVL_RDMA0_HDR>;
+			/*iommus = <&iommu0 M4U_PORT_L0_OVL_RDMA0>,
+			         <&iommu0 M4U_PORT_L0_OVL_RDMA0_HDR>;*/
 
 			ports {
 				#address-cells = <1>;
@@ -1149,8 +1153,8 @@
 			interrupts = <GIC_SPI 288 IRQ_TYPE_LEVEL_HIGH &ppi_cluster0>;
 			power-domains = <&spm MT6789_POWER_DOMAIN_DISP>;
 			clocks = <&mmsys CLK_MM_DISP_OVL0_2L>;
-			iommus = <&iommu0 M4U_PORT_L1_OVL_2L_RDMA0>,
-			         <&iommu0 M4U_PORT_L1_OVL_2L_RDMA0_HDR>;
+			/*iommus = <&iommu0 M4U_PORT_L1_OVL_2L_RDMA0>,
+			         <&iommu0 M4U_PORT_L1_OVL_2L_RDMA0_HDR>;*/
 			mediatek,gce-client-reg = <&gce0 SUBSYS_1400XXXX 0x6000 0x1000>;
 		};
 
@@ -1162,7 +1166,7 @@
 			clocks = <&mmsys CLK_MM_DISP_RDMA0>;
 			mediatek,rdma-fifo-size = <48992>;
 			mediatek,gce-client-reg = <&gce0 SUBSYS_1400XXXX 0x7000 0x1000>;
-			iommus = <&iommu0 M4U_PORT_L1_DISP_RDMA0>;
+			/*iommus = <&iommu0 M4U_PORT_L1_DISP_RDMA0>;*/
 
 			ports {
 				#address-cells = <1>;
@@ -1245,7 +1249,7 @@
 			interrupts = <GIC_SPI 296 IRQ_TYPE_LEVEL_HIGH &ppi_cluster0>;
 			power-domains = <&spm MT6789_POWER_DOMAIN_DISP>;
 			clocks = <&mmsys CLK_MM_DISP_POSTMASK0>;
-			iommus = <&iommu0 M4U_PORT_L0_DISP_POSTMASK0>;
+			/*iommus = <&iommu0 M4U_PORT_L0_DISP_POSTMASK0>;*/
 			mediatek,gce-client-reg = <&gce0 SUBSYS_1400XXXX 0xe000 0x1000>;
 		};
 
