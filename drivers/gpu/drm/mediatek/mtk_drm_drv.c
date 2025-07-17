@@ -72,16 +72,21 @@ static const unsigned int mt2701_mtk_ddp_ext[] = {
 };
 
 static const unsigned int mt6789_mtk_ddp_main[] = {
+	DDP_COMPONENT_DRM_OVL_ADAPTOR,
 	DDP_COMPONENT_OVL0,
 	DDP_COMPONENT_RDMA0,
 	DDP_COMPONENT_COLOR0,
-	DDP_COMPONENT_CCORR,
+	/*DDP_COMPONENT_CCORR,
 	DDP_COMPONENT_AAL0,
 	DDP_COMPONENT_GAMMA,
-	DDP_COMPONENT_POSTMASK0,
+	DDP_COMPONENT_POSTMASK0,*/
 	DDP_COMPONENT_DITHER0,
 	DDP_COMPONENT_DSC0,
 	DDP_COMPONENT_DSI0
+};
+
+static const struct mtk_drm_route mt6789_mtk_ddp_main_routes[] = {
+	{0, DDP_COMPONENT_DSI0},
 };
 
 static const unsigned int mt7623_mtk_ddp_main[] = {
@@ -274,6 +279,8 @@ static const struct mtk_mmsys_driver_data mt2712_mmsys_driver_data = {
 static const struct mtk_mmsys_driver_data mt6789_mmsys_driver_data = {
 	.main_path = mt6789_mtk_ddp_main,
 	.main_len = ARRAY_SIZE(mt6789_mtk_ddp_main),
+	.conn_routes = mt6789_mtk_ddp_main_routes,
+	.num_conn_routes = ARRAY_SIZE(mt6789_mtk_ddp_main_routes),
 	.mmsys_dev_num = 1,
 };
 
@@ -759,8 +766,6 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	  .data = (void *)MTK_DISP_CCORR },
 	{ .compatible = "mediatek,mt2701-disp-color",
 	  .data = (void *)MTK_DISP_COLOR },
-	{ .compatible = "mediatek,mt6789-disp-color",
-	  .data = (void *)MTK_DISP_COLOR },
 	{ .compatible = "mediatek,mt8167-disp-color",
 	  .data = (void *)MTK_DISP_COLOR },
 	{ .compatible = "mediatek,mt8173-disp-color",
@@ -824,6 +829,8 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	{ .compatible = "mediatek,mt8192-disp-ovl-2l",
 	  .data = (void *)MTK_DISP_OVL_2L },
 	{ .compatible = "mediatek,mt8192-disp-postmask",
+	  .data = (void *)MTK_DISP_POSTMASK },
+	{ .compatible = "mediatek,mt6789-disp-postmask",
 	  .data = (void *)MTK_DISP_POSTMASK },
 	{ .compatible = "mediatek,mt2701-disp-pwm",
 	  .data = (void *)MTK_DISP_BLS },
