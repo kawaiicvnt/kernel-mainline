@@ -13,6 +13,8 @@
 #include <dt-bindings/reset/mediatek,mt6789-resets.h>
 #include <dt-bindings/gce/mediatek,mt6789-gce.h>
 #include <dt-bindings/memory/mediatek,mt6789-memory-port.h>
+#include <dt-bindings/thermal/thermal.h>
+#include <dt-bindings/thermal/mediatek,lvts-thermal.h>
 
 / {
 	compatible = "mediatek,mt6789";
@@ -52,6 +54,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu1: cpu@100 {
@@ -69,6 +72,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu2: cpu@200 {
@@ -86,6 +90,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu3: cpu@300 {
@@ -103,6 +108,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu4: cpu@400 {
@@ -120,6 +126,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu5: cpu@500 {
@@ -137,6 +144,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&l2_0>;
+			#cooling-cells = <2>;
 		};
 
 		cpu6: cpu@600 {
@@ -154,6 +162,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <256>;
 			next-level-cache = <&l2_1>;
+			#cooling-cells = <2>;
 		};
 
 		cpu7: cpu@700 {
@@ -171,6 +180,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <256>;
 			next-level-cache = <&l2_1>;
+			#cooling-cells = <2>;
 		};
 
 		cpu-map {
@@ -674,10 +684,355 @@
 			#clock-cells = <1>;
 		};
 
+
 		mdpsys: syscon@1f000000 {
 			compatible = "mediatek,mt6789-mdpsys", "syscon";
 			reg = <0 0x1f000000 0 0x1000>;
 			#clock-cells = <1>;
+		};
+
+		efuse: efuse@11c10000 {
+			compatible = "mediatek,mt6789-efuse", "mediatek,efuse";
+			reg = <0 0x11c10000 0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			lvts_efuse_data1: lvts1-calib {
+				reg = <0x1b4 0x2c>;
+			};
+
+			lvts_efuse_data2: lvts2-calib {
+				reg = <0x2f8 0x8>;
+			};
+		};
+
+		lvts_ap: thermal-sensor@1100b000 {
+			compatible = "mediatek,mt6789-lvts-ap";
+			reg = <0 0x1100b000 0 0xc00>;
+			interrupts = <GIC_SPI 201 IRQ_TYPE_LEVEL_HIGH &ppi_cluster0>;
+			clocks = <&infracfg_ao CLK_IFRAO_THERM>;
+			resets = <&infracfg_ao MT6789_INFRA_RST0_LVTS_AP_SWRST>;
+
+			nvmem-cells = <&lvts_efuse_data1 &lvts_efuse_data2>;
+			nvmem-cell-names = "lvts-calib-data-1", "lvts-calib-data-2";
+
+			#thermal-sensor-cells = <1>;
+		};
+
+		thermal_zones: thermal-zones {
+			gpu0-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_GPU0>;
+
+				trips {
+					gpu0_alert0: trip-alert0 {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					gpu0_alert1: trip-alert1 {
+						temperature = <95000>;
+						hysteresis = <2000>;
+						type = "hot";
+					};
+
+					gpu0_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <0>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&gpu0_alert0>;
+						cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			gpu1-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_GPU1>;
+
+				trips {
+					gpu1_alert0: trip-alert0 {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					gpu1_alert1: trip-alert1 {
+						temperature = <95000>;
+						hysteresis = <2000>;
+						type = "hot";
+					};
+
+					gpu1_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <0>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&gpu1_alert0>;
+						cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu0-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU0>;
+
+				trips {
+					cpu0_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu0_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu0_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu1-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU1>;
+
+				trips {
+					cpu1_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu1_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu1_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu2-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU2>;
+
+				trips {
+					cpu2_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu2_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu2_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu3-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU3>;
+
+				trips {
+					cpu3_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu3_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu3_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu4-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU4>;
+
+				trips {
+					cpu4_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu4_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu4_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu5-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_LITTLE_CPU5>;
+
+				trips {
+					cpu5_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu5_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu5_alert>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu6-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_BIG_CPU0>;
+
+				trips {
+					cpu6_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu6_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu6_alert>;
+						cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+
+			cpu7-thermal {
+				polling-delay = <1000>;
+				polling-delay-passive = <250>;
+				thermal-sensors = <&lvts_ap MT6789_AP_BIG_CPU1>;
+
+				trips {
+					cpu7_alert: trip-alert {
+						temperature = <85000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					cpu7_crit: trip-crit {
+						temperature = <100000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&cpu7_alert>;
+						cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+									<&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
 		};
 
 		mmsys: syscon@14000000 {
