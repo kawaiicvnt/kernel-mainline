@@ -141,6 +141,39 @@
  * CPU6 and CPU7 are fails to boot due some capability conflicts
  */
 
+&cpu0 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu1 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu2 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu3 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu4 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu5 {
+	cpu-supply = <&mt6366_vproc11_reg>;
+};
+
+&cpu6 {
+	cpu-supply = <&mt6366_vproc12_reg>;
+};
+
+&cpu7 {
+	cpu-supply = <&mt6366_vproc12_reg>;
+};
+
+
 &mfg0 {
 	domain-supply = <&mt6366_vgpu_reg>;
 };
