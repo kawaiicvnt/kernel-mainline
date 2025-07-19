@@ -132,6 +132,75 @@
 		regulator-always-on;
 		regulator-boot-on;
 	};
+
+	/*
+	 * These sensors are connected to SCP (System Companion Processor)
+	 * They work via sensorhub ipi (same way as Qualcomm SSC).
+	 *
+	 * We don't have drivers for sensorhub yet, so we bitbanging scp pins
+	 * to get access to sensors bypassing sensorhub.
+	 *
+	 * TODO: Figure out how to get eints for sensors without RE
+	 * scp firmware.
+	 *
+	 * MT6789 uses MDSP RV55 SCP, which is based on rv32imafc ISA.
+	 * Ghidra generates some nosense code, so we can't RE
+	 * it's firmware for now.
+	 */
+
+	i2c_scp0: i2c-gpio-0 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c0_scp_pins>;
+		compatible = "i2c-gpio";
+		sda-gpios = <&pio 133 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pio 132 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* qmc6308-magnetic @ 2c */
+		/* tsl2522-light @ 39 */
+	};
+
+	i2c_scp1: i2c-gpio-1 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c1_scp_pins>;
+		compatible = "i2c-gpio";
+		sda-gpios = <&pio 131 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pio 130 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* tyhx,hx9034-sar @ 1b */
+	};
+
+	spi_scp1: spi-gpio-scp-1 {
+		compatible = "spi-gpio";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi1_scp_pins>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		sck-gpios = <&pio 38 GPIO_ACTIVE_HIGH>;
+		miso-gpios = <&pio 41 GPIO_ACTIVE_HIGH>;
+		mosi-gpios = <&pio 40 GPIO_ACTIVE_HIGH>;
+		cs-gpios = <&pio 39 GPIO_ACTIVE_LOW>;
+		num-chipselects = <1>;
+
+		lsm6dso@0 {
+			compatible = "st,lsm6dso";
+			reg = <0>;
+
+			vdd-supply = <&mt6366_vio18_reg>;
+			vddio-supply = <&mt6366_vio28_reg>;
+
+			//We don't know eint pin for now
+			//interrupts-extended = <&pio X IRQ_TYPE_EDGE_RISING>;
+		};
+	};
 };
 
 /* FIXME: Enabling more than 4 CPUs causes weird hangs at boot,
@@ -443,6 +512,23 @@
 					 <PINMUX_GPIO37__FUNC_SPI1_MI>;
 			bias-disable;
 		};
+	};
+
+	i2c0_scp_pins: i2c0-scp-pins {
+		pinmux = <PINMUX_GPIO133__FUNC_SCP_SDA0>,
+				 <PINMUX_GPIO132__FUNC_SCP_SCL0>;
+	};
+
+	i2c1_scp_pins: i2c1-scp-pins {
+		pinmux = <PINMUX_GPIO131__FUNC_SCP_SDA1>,
+				 <PINMUX_GPIO130__FUNC_SCP_SCL1>;
+	};
+
+	spi1_scp_pins: spi1-scp-pins {
+		pinmux = <PINMUX_GPIO38__FUNC_SCP_SPI1_CK>,
+				 <PINMUX_GPIO39__FUNC_SCP_SPI1_CS>,
+				 <PINMUX_GPIO40__FUNC_SCP_SPI1_MO>,
+				 <PINMUX_GPIO41__FUNC_SCP_SPI1_MI>;
 	};
 };
 
