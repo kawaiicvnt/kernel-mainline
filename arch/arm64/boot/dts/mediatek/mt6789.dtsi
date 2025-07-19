@@ -464,7 +464,7 @@
 		ranges;
 
 		performance: performance-controller@11bc10 {
-			compatible = "mediatek,cpufreq-hw";
+			compatible = "mediatek,mt6789-cpufreq-hw";
 			reg = <0 0x0011bc10 0 0x120>, <0 0x0011bd30 0 0x120>;
 			#performance-domain-cells = <1>;
 		};
