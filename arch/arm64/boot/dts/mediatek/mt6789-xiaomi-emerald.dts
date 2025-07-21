@@ -36,6 +36,8 @@
 			stride = <((1080 + 8) * 4)>;
 			format = "a8r8g8b8";
 
+			power-domains = <&spm MT6789_POWER_DOMAIN_DISP>;
+
 			panel = <&panel>;
 		};
 	};
