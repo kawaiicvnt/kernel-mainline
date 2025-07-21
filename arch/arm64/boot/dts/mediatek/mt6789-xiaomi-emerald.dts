@@ -197,6 +197,10 @@
 			vdd-supply = <&mt6366_vio18_reg>;
 			vddio-supply = <&mt6366_vio28_reg>;
 
+			mount-matrix = "-1", "0", "0",
+					"0", "-1", "0",
+					"0", "0", "1";
+
 			//We don't know eint pin for now
 			//interrupts-extended = <&pio X IRQ_TYPE_EDGE_RISING>;
 		};
