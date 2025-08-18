@@ -306,6 +306,13 @@ static const struct pwm_mediatek_of_data mt2712_pwm_data = {
 	.reg_offset = mtk_pwm_reg_offset_v1,
 };
 
+static const struct pwm_mediatek_of_data mt6789_pwm_data = {
+	.num_pwms = 4,
+	.pwm45_fixup = false,
+	.pwm_ck_26m_sel_reg = PWM_CK_26M_SEL_V3,
+	.reg_offset = mtk_pwm_reg_offset_v2,
+};
+
 static const struct pwm_mediatek_of_data mt6795_pwm_data = {
 	.num_pwms = 7,
 	.pwm45_fixup = false,
@@ -387,6 +394,7 @@ static const struct pwm_mediatek_of_data mt6991_pwm_data = {
 
 static const struct of_device_id pwm_mediatek_of_match[] = {
 	{ .compatible = "mediatek,mt2712-pwm", .data = &mt2712_pwm_data },
+	{ .compatible = "mediatek,mt6789-pwm", .data = &mt6789_pwm_data },
 	{ .compatible = "mediatek,mt6795-pwm", .data = &mt6795_pwm_data },
 	{ .compatible = "mediatek,mt6991-pwm", .data = &mt6991_pwm_data },
 	{ .compatible = "mediatek,mt7622-pwm", .data = &mt7622_pwm_data },
