@@ -54,6 +54,11 @@
 		};
 	};
 
+	irled {
+		compatible = "pwm-ir-tx";
+		pwms = <&pwm0 1 1000000>;
+	};
+
 	battery: battery {
 		/* dual-cell battery */
 		compatible = "simple-battery";
