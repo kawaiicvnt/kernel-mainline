@@ -1683,9 +1683,8 @@
 			      <0 0x11e60000 0 0x1000>,
 			      <0 0x11ea0000 0 0x1000>,
 			      <0 0x1000b000 0 0x1000>;
-			reg-names = "iocfg0", "iocfg_rb",  "iocfg_bm",
-			            "iocfg_br", "iocfg_lm", "iocfg_bl",
-			            "iocfg_rt", "eint";
+			reg-names = "base", "rb",  "bm", "br", "lm", "bl",
+				    "rt", "eint";
 			gpio-controller;
 			#gpio-cells = <2>;
 			gpio-ranges = <&pio 0 0 188>;
