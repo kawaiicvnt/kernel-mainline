@@ -250,7 +250,6 @@
 	cpu-supply = <&mt6366_vproc12_reg>;
 };
 
-
 &mfg0 {
 	domain-supply = <&mt6366_vgpu_reg>;
 };
@@ -263,7 +262,6 @@
 	status = "okay";
 
 	mali-supply = <&mt6366_vgpu_reg>;
-	sram-supply = <&mt6366_vsram_gpu_reg>;
 };
 
 &dsi0 {
@@ -607,15 +605,14 @@
 			mt6366_vgpu_reg: vgpu {
 				regulator-name = "vgpu";
 				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <850000>;
+				regulator-max-microvolt = <900000>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <200>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
 				                           MT6397_BUCK_MODE_FORCE_PWM>;
 
-				/*regulator-always-on;
 				regulator-coupled-with = <&mt6366_vsram_gpu_reg>;
-				regulator-coupled-max-spread = <100000>;*/
+				regulator-coupled-max-spread = <100000>;
 			};
 
 			mt6366_vs2_reg: vs2 {
@@ -770,8 +767,8 @@
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
 
-				/*regulator-coupled-with = <&mt6366_vgpu_reg>;
-				regulator-coupled-max-spread = <100000>;*/
+				regulator-coupled-with = <&mt6366_vgpu_reg>;
+				regulator-coupled-max-spread = <100000>;
 			};
 
 			mt6366_vxo22_reg: vxo22 {
