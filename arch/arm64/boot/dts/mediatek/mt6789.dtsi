@@ -655,8 +655,16 @@
 
 		toprgu: watchdog@10007000 {
 			compatible = "mediatek,mt6789-wdt",
-			             "mediatek,mt6589-wdt";
+				     "mediatek,mt6589-wdt";
 			reg = <0 0x10007000 0 0x100>;
+
+			reboot-mode {
+				compatible = "syscon-reboot-mode";
+				offset = <0x24>;
+				mask = <0xf>;
+				mode-recovery = <2>;
+				mode-bootloader = <3>;
+			};
 		};
 
 		mcusys: syscon@c530000 {
