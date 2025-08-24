@@ -880,8 +880,8 @@ static const char * const mediatek_pm_domains[] = { "core0", "core1", "core2",
 static const char * const legacy_supplies[] = { "mali", "sram", NULL };
 
 static const struct panfrost_compatible mediatek_mt6789_data = {
-	.num_supplies = ARRAY_SIZE(legacy_supplies) - 1,
-	.supply_names = legacy_supplies,
+	.num_supplies = ARRAY_SIZE(default_supplies) - 1,
+	.supply_names = default_supplies,
 	.num_pm_domains = 2,
 	.pm_domain_names = mediatek_pm_domains,
 	.pm_features = BIT(GPU_PM_CLK_DIS) | BIT(GPU_PM_VREG_OFF),
