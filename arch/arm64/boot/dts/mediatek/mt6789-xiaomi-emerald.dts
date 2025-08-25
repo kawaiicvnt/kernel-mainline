@@ -211,6 +211,20 @@
 	};
 };
 
+&fhctl {
+	clocks = <&apmixedsys CLK_APMIXED_MFGPLL>,
+		 <&apmixedsys CLK_APMIXED_MMPLL>,
+		 <&apmixedsys CLK_APMIXED_MAINPLL>,
+		 <&apmixedsys CLK_APMIXED_MSDCPLL>,
+		 <&apmixedsys CLK_APMIXED_TVDPLL>;
+	mediatek,hopping-ssc-percent = <2>,
+				       <2>,
+				       <8>,
+				       <8>,
+				       <2>;
+	status = "okay";
+};
+
 /* FIXME: Enabling more than 4 CPUs causes weird hangs at boot,
  * CPU4 and CPU5 can be enabled after boot by writing 1 to:
  * /sys/devices/system/cpu/cpu4/online
