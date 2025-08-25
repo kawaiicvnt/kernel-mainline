@@ -720,6 +720,11 @@
 			#clock-cells = <1>;
 		};
 
+		fhctl: fhctl@1000ce00 {
+			compatible = "mediatek,mt6789-fhctl";
+			reg = <0 0x1000ce00 0 0x200>;
+			status = "disabled";
+		};
 
 		mdpsys: syscon@1f000000 {
 			compatible = "mediatek,mt6789-mdpsys", "syscon";
