@@ -653,6 +653,34 @@
 			};
 		};
 
+		dvfsrc: system-controller@10012000 {
+			compatible = "mediatek,mt6789-dvfsrc";
+			reg = <0 0x10012000 0 0x1000>;
+
+			regulators {
+				compatible = "mediatek,mt6789-dvfsrc-regulator";
+
+				dvfsrc_vcore: dvfsrc-vcore {
+					regulator-name = "dvfsrc-vcore";
+					regulator-min-microvolt = <550000>;
+					regulator-max-microvolt = <725000>;
+					regulator-always-on;
+				};
+
+				dvfsrc_vscp: dvfsrc-vscp {
+					regulator-name = "dvfsrc-vscp";
+					regulator-min-microvolt = <550000>;
+					regulator-max-microvolt = <725000>;
+					regulator-always-on;
+				};
+			};
+
+			emi_icc: interconnect {
+				compatible = "mediatek,mt6789-emi";
+				#interconnect-cells = <1>;
+			};
+		};
+
 		toprgu: watchdog@10007000 {
 			compatible = "mediatek,mt6789-wdt",
 				     "mediatek,mt6589-wdt";
