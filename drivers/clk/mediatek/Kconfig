@@ -476,7 +476,13 @@ config COMMON_CLK_MT8135
 	default ARCH_MEDIATEK && ARM
 	help
 	  This driver supports MediaTek MT8135 clocks.
-
+config COMMON_CLK_MT8163
+	tristate "Clock driver for MediaTek MT8163"
+	depends on (ARCH_MEDIATEK && ARM) || COMPILE_TEST
+	select COMMON_CLK_MEDIATEK
+	default ARCH_MEDIATEK
+	help
+	  This driver supports MediaTek MT8163 clocks.
 config COMMON_CLK_MT8167
 	tristate "Clock driver for MediaTek MT8167"
 	depends on (ARCH_MEDIATEK && ARM64) || COMPILE_TEST
