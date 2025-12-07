@@ -5,7 +5,6 @@ SUBLEVEL = 0
 EXTRAVERSION = -rc2
 NAME = Baby Opossum Posse
 
-export KCONFIG_EXT_PREFIX := google-devices/caimito/
 export KCONFIG_SOC_GS_PREFIX := google-modules/soc/gs/
 export KCONFIG_EXT_MODULES_PREFIX := ./
 KCFLAGS += -D__ANDROID_COMMON_KERNEL__
