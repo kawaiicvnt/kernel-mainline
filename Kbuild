@@ -110,3 +110,4 @@ obj-y			+= virt/
 obj-y			+= $(ARCH_DRIVERS)
 obj-$(CONFIG_DRM_HEADER_TEST)	+= include/
 obj-y			+= google-devices/
+obj-y			+= google-modules/
