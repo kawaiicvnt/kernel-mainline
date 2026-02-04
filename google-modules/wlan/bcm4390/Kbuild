@@ -127,7 +127,7 @@ DHDCFLAGS += \
   -DPMU_NEW_ACCESS_MACROS \
   -DSR_NEW_ACCESS_MACROS
 
-DHDCFLAGS += \
+DHDCFLAGS += -Wall -Werror -Wstrict-prototypes -Wno-unused-variable -Wno-unused-function -Wno-address -Wno-int-in-bool-context -Wno-parentheses-equality -Wno-unused-but-set-variable -Dlinux -DLINUX -DBCMDRIVER \
   -DARP_OFFLOAD_SUPPORT \
   -DBCMDMA32 \
   -DBCMDONGLEHOST \
@@ -147,9 +147,7 @@ DHDCFLAGS += \
   -DWLP2P \
   -DWL_BW160MHZ \
   -DWL_BW320MHZ \
-  -DWL_P2P_USE_RANDMAC \
-  -Wall \
-  -Wstrict-prototypes
+  -DWL_P2P_USE_RANDMAC
 
 # Allow Zero-length and one-element arrays instead of forcing C99 FAM
 ifneq ($(CONFIG_SOC_GOOGLE),)
