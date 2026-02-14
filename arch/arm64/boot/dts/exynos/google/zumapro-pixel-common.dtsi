@@ -22,8 +22,8 @@
 	chosen {
 		/* Bootloader expects bootargs specified otherwise it crashes */
 		bootargs = "earlycon=exynos4210,mmio32,0x10870000 console=tty0 clk_ignore_unused regulator_ignore_unused pd_ignore_unused";
-		// stdout-path = &serial_0;
-		stdout-path = &framebuffer0;
+		stdout-path = &serial_0;
+		// stdout-path = &framebuffer0;
 
 		/* Use display framebuffer as setup by bootloader */
 		framebuffer0: framebuffer-0 {
