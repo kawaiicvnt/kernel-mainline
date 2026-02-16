@@ -1305,6 +1305,9 @@ static const struct phy_ops exynos7870_usbdrd_phy_ops = {
 static void exynos2200_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
 {
 	/* Configure non-Samsung IP PHY, responsible for UTMI */
+	if (!phy_drd->hs_phy)
+		return;
+
 	phy_init(phy_drd->hs_phy);
 }
 
@@ -1666,6 +1669,19 @@ static void exynos5_usbdrd_gs101_pipe3_init(struct exynos5_usbdrd_phy *phy_drd)
 		exynos5_usbdrd_usbdp_g2_v4_pma_check_cdr_lock(phy_drd);
 }
 
+static void exynos5_usbdrd_zuma_pipe3_init(struct exynos5_usbdrd_phy *phy_drd)
+{
+	/*
+	 * Keep Zuma bring-up flow separate.
+	 *
+	 * The gs101 PMA register sequence triggers an SError on Zuma during
+	 * very early bring-up. Until the dedicated downstream ComboPHY flow
+	 * is ported on top of the mainline framework, leave PIPE3 init empty
+	 * to avoid fatal PMA MMIO access.
+	 */
+	dev_dbg(phy_drd->dev, "zuma pipe3 init deferred\n");
+}
+
 static int exynos5_usbdrd_gs101_phy_init(struct phy *phy)
 {
 	struct phy_usb_instance *inst = phy_get_drvdata(phy);
@@ -1712,9 +1728,41 @@ static int exynos5_usbdrd_gs101_phy_exit(struct phy *phy)
 				      phy_drd->regulators);
 }
 
+static int exynos5_usbdrd_zuma_phy_init(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+
+	dev_info(phy_drd->dev, "zuma phy init: id=%u\n", inst->phy_cfg->id);
+
+	/* Downstream uses DT-provided ref clock parameters instead of clk rate. */
+	phy_drd->extrefclk = EXYNOS5_FSEL_19MHZ2;
+
+	if (inst->phy_cfg->id == EXYNOS5_DRDPHY_UTMI)
+		return exynos2200_usbdrd_phy_init(phy);
+
+	return exynos5_usbdrd_gs101_phy_init(phy);
+}
+
+static int exynos5_usbdrd_zuma_phy_exit(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+
+	if (inst->phy_cfg->id == EXYNOS5_DRDPHY_UTMI)
+		return exynos2200_usbdrd_phy_exit(phy);
+
+	return exynos5_usbdrd_gs101_phy_exit(phy);
+}
+
 static const struct phy_ops gs101_usbdrd_phy_ops = {
 	.init		= exynos5_usbdrd_gs101_phy_init,
 	.exit		= exynos5_usbdrd_gs101_phy_exit,
+	.owner		= THIS_MODULE,
+};
+
+static const struct phy_ops zuma_usbdrd_phy_ops = {
+	.init		= exynos5_usbdrd_zuma_phy_init,
+	.exit		= exynos5_usbdrd_zuma_phy_exit,
 	.owner		= THIS_MODULE,
 };
 
@@ -2067,6 +2115,19 @@ static const struct exynos5_usbdrd_phy_config phy_cfg_gs101[] = {
 	},
 };
 
+static const struct exynos5_usbdrd_phy_config phy_cfg_zuma[] = {
+	{
+		.id		= EXYNOS5_DRDPHY_UTMI,
+		.phy_isol	= exynos5_usbdrd_phy_isol,
+		.phy_init	= exynos2200_usbdrd_utmi_init,
+	},
+	{
+		.id		= EXYNOS5_DRDPHY_PIPE3,
+		.phy_isol	= exynos5_usbdrd_phy_isol,
+		.phy_init	= exynos5_usbdrd_zuma_pipe3_init,
+	},
+};
+
 static const struct exynos5_usbdrd_phy_tuning gs101_tunes_utmi_postinit[] = {
 	PHY_TUNING_ENTRY_PHY(EXYNOS850_DRD_HSPPARACON,
 			     (HSPPARACON_TXVREF | HSPPARACON_TXRES |
@@ -2212,6 +2273,10 @@ static const char * const gs101_clk_names[] = {
 	"phy", "ctrl_aclk", "ctrl_pclk", "scl_pclk",
 };
 
+static const char * const zuma_clk_names[] = {
+	"aclk", "phy_ref", "ctrl_aclk", "ctrl_pclk", "scl_pclk",
+};
+
 static const char * const gs101_regulator_names[] = {
 	"pll",
 	"dvdd-usb20", "vddh-usb20", "vdd33-usb20",
@@ -2232,8 +2297,25 @@ static const struct exynos5_usbdrd_phy_drvdata gs101_usbd31rd_phy = {
 	.n_regulators			= ARRAY_SIZE(gs101_regulator_names),
 };
 
+static const struct exynos5_usbdrd_phy_drvdata zuma_usbd31rd_phy = {
+	.phy_cfg			= phy_cfg_zuma,
+	.phy_tunes			= gs101_tunes,
+	.phy_ops			= &zuma_usbdrd_phy_ops,
+	.pmu_offset_usbdrd0_phy		= GS101_PHY_CTRL_USB20,
+	.pmu_offset_usbdrd0_phy_ss	= GS101_PHY_CTRL_USBDP,
+	.clk_names			= zuma_clk_names,
+	.n_clks				= ARRAY_SIZE(zuma_clk_names),
+	.core_clk_names			= NULL,
+	.n_core_clks			= 0,
+	.regulator_names		= gs101_regulator_names,
+	.n_regulators			= ARRAY_SIZE(gs101_regulator_names),
+};
+
 static const struct of_device_id exynos5_usbdrd_phy_of_match[] = {
 	{
+		.compatible = "google,zuma-usb31drd-phy",
+		.data = &zuma_usbd31rd_phy
+	}, {
 		.compatible = "google,gs101-usb31drd-phy",
 		.data = &gs101_usbd31rd_phy
 	}, {

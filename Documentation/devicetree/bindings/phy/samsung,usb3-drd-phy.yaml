@@ -25,6 +25,7 @@ description: |
 properties:
   compatible:
     enum:
+      - google,zuma-usb31drd-phy
       - google,gs101-usb31drd-phy
       - samsung,exynos2200-usb32drd-phy
       - samsung,exynos5250-usbdrd-phy
@@ -123,7 +124,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: google,gs101-usb31drd-phy
+            enum:
+              - google,zuma-usb31drd-phy
+              - google,gs101-usb31drd-phy
     then:
       allOf:
         - $ref: /schemas/usb/usb-switch.yaml#
