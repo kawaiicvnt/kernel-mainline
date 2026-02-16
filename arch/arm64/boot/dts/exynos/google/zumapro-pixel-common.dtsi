@@ -21,7 +21,7 @@
 
 	chosen {
 		/* Bootloader expects bootargs specified otherwise it crashes */
-		bootargs = "earlycon=exynos4210,mmio32,0x10870000 console=tty0 clk_ignore_unused regulator_ignore_unused pd_ignore_unused";
+		bootargs = "earlycon=exynos4210,mmio32,0x10870000 console=ttySAC0,115200n8 console=tty0 clk_ignore_unused regulator_ignore_unused pd_ignore_unused";
 		stdout-path = &serial_0;
 		// stdout-path = &framebuffer0;
 
@@ -361,6 +361,11 @@
 
 &usbdrd31_dwc3 {
 	dr_mode = "otg";
+	/*
+	 * Bring-up: force peripheral path first to guarantee UDC registration.
+	 * Re-enable role-switch once Type-C role/orientation plumbing is stable.
+	 */
+	dr_mode = "peripheral";
 	usb-role-switch;
 	role-switch-default-mode = "peripheral";
 	maximum-speed = "super-speed-plus";
