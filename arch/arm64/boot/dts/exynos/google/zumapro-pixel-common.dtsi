@@ -387,6 +387,11 @@
 
 &usbdrd31_dwc3 {
 	dr_mode = "otg";
+	/*
+	 * Bring-up: force peripheral path first to guarantee UDC registration.
+	 * Re-enable role-switch once Type-C role/orientation plumbing is stable.
+	 */
+	dr_mode = "peripheral";
 	usb-role-switch;
 	role-switch-default-mode = "peripheral";
 	maximum-speed = "super-speed-plus";

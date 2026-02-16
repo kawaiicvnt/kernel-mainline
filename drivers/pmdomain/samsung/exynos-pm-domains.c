@@ -86,6 +86,13 @@ static const struct of_device_id exynos_pm_domain_of_match[] = {
 		.compatible = "samsung,exynos4210-pd",
 		.data = &exynos4210_cfg,
 	}, {
+		/*
+		 * Newer Google/Samsung SoCs use "samsung,exynos-pd" nodes.
+		 * Keep using the same LOCAL_PWR_CFG mask as exynos5433.
+		 */
+		.compatible = "samsung,exynos-pd",
+		.data = &exynos5433_cfg,
+	}, {
 		.compatible = "samsung,exynos5433-pd",
 		.data = &exynos5433_cfg,
 	},

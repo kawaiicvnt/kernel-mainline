@@ -13,6 +13,7 @@ properties:
   compatible:
     oneOf:
       - enum:
+          - google,zuma-dwusb3
           - google,gs101-dwusb3
           - samsung,exynos2200-dwusb3
           - samsung,exynos5250-dwusb3
@@ -72,7 +73,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: google,gs101-dwusb3
+            enum:
+              - google,zuma-dwusb3
+              - google,gs101-dwusb3
     then:
       properties:
         clocks:
