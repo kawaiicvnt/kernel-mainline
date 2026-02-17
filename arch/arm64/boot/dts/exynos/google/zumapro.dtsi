@@ -754,14 +754,14 @@
 			clock-names = "oscclk", "bus", "ip";
 		};
 
-		sysreg_peric0: syscon@10820000 {
+		sysreg_peric0: syscon@10821000 {
 			compatible = "google,gs101-peric0-sysreg", "syscon";
-			reg = <0x10820000 0x10000>;
+			reg = <0x10821000 0x1000>;
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_SYSREG_PERIC0_PCLK>;
 		};
 
 		pinctrl_peric0: pinctrl@10840000 {
-			compatible = "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x10840000 0x00001000>;
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_GPIO_PERIC0_PCLK>;
 			clock-names = "pclk";
@@ -777,7 +777,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_0>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_0>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1000>;
+			samsung,sysreg = <&sysreg_peric0 0x0>;
 			status = "disabled";
 
 			hsi2c_1: i2c@10880000 {
@@ -797,7 +797,7 @@
 
 			serial_1: serial@10880000 {
 				compatible = "google,zuma-uart", "google,gs101-uart";
-				reg = <0x10900000 0xc0>;
+				reg = <0x10880000 0xc0>;
 				clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_0>,
 					 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_0>;
 				clock-names = "uart", "clk_uart_baud0";
@@ -832,7 +832,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_1>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_1>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1004>;
+			samsung,sysreg = <&sysreg_peric0 0x4>;
 			status = "disabled";
 
 			hsi2c_2: i2c@10890000 {
@@ -887,7 +887,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_2>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1008>;
+			samsung,sysreg = <&sysreg_peric0 0x8>;
 			status = "disabled";
 
 			hsi2c_3: i2c@108a0000 {
@@ -942,7 +942,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_3>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_3>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x100c>;
+			samsung,sysreg = <&sysreg_peric0 0xc>;
 			status = "disabled";
 
 			hsi2c_4: i2c@108b0000 {
@@ -997,7 +997,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_4>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_4>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1010>;
+			samsung,sysreg = <&sysreg_peric0 0x10>;
 			status = "disabled";
 
 			hsi2c_5: i2c@108c0000 {
@@ -1052,7 +1052,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_5>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_5>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1014>;
+			samsung,sysreg = <&sysreg_peric0 0x14>;
 			status = "disabled";
 
 			hsi2c_6: i2c@108d0000 {
@@ -1108,7 +1108,7 @@
 		// 	clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_6>,
 		// 		 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_6>;
 		// 	clock-names = "pclk", "ipclk";
-		// 	samsung,sysreg = <&sysreg_peric0 0x1018>;
+		// 	samsung,sysreg = <&sysreg_peric0 0x18>;
 		// 	status = "disabled";
   //
 		// 	hsi2c_7: i2c@10960000 {
@@ -1163,7 +1163,7 @@
 		// 	clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_7>,
 		// 		 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_7>;
 		// 	clock-names = "pclk", "ipclk";
-		// 	samsung,sysreg = <&sysreg_peric0 0x101c>;
+		// 	samsung,sysreg = <&sysreg_peric0 0x1c>;
 		// 	status = "disabled";
   //
 		// 	hsi2c_8: i2c@10970000 {
@@ -1218,7 +1218,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_PCLK_0>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_IPCLK_0>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1020>;
+			samsung,sysreg = <&sysreg_peric0 0x20>;
 			samsung,mode = <USI_MODE_UART>;
 			status = "disabled";
 
@@ -1245,7 +1245,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_PCLK_2>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x1028>;
+			samsung,sysreg = <&sysreg_peric0 0x28>;
 			status = "disabled";
 
 			hsi2c_14: i2c@10980000 {
@@ -1301,14 +1301,14 @@
 			clock-names = "oscclk", "bus", "ip";
 		};
 
-		sysreg_peric1: syscon@10c20000 {
+		sysreg_peric1: syscon@10c21000 {
 			compatible = "google,gs101-peric1-sysreg", "syscon";
-			reg = <0x10c20000 0x10000>;
+			reg = <0x10c21000 0x1000>;
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_SYSREG_PERIC1_PCLK>;
 		};
 
 		pinctrl_peric1: pinctrl@10c40000 {
-			compatible = "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x10c40000 0x00001000>;
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_GPIO_PERIC1_PCLK>;
 			clock-names = "pclk";
@@ -1324,7 +1324,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_1>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_1>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x1000>;
+			samsung,sysreg = <&sysreg_peric1 0x0>;
 			status = "disabled";
 
 			hsi2c_0: i2c@10c80000 {
@@ -1379,7 +1379,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_2>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x1004>;
+			samsung,sysreg = <&sysreg_peric1 0x4>;
 			status = "disabled";
 
 			hsi2c_9: i2c@10c90000 {
@@ -1434,7 +1434,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_3>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_3>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x1008>;
+			samsung,sysreg = <&sysreg_peric1 0x8>;
 			status = "disabled";
 
 			hsi2c_10: i2c@10ca0000 {
@@ -1489,7 +1489,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_4>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_4>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x100c>;
+			samsung,sysreg = <&sysreg_peric1 0xc>;
 			status = "disabled";
 
 			hsi2c_11: i2c@10cb0000 {
@@ -1544,7 +1544,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_5>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_5>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x1010>;
+			samsung,sysreg = <&sysreg_peric1 0x10>;
 			status = "disabled";
 
 			hsi2c_12: i2c@10cc0000 {
@@ -1599,23 +1599,8 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_6>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_6>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x1014>;
+			samsung,sysreg = <&sysreg_peric1 0x14>;
 			status = "disabled";
-
-			hsi2c_13: i2c@10cd0000 {
-				compatible = "google,zuma-hsi2c",
-					     "samsung,exynosautov9-hsi2c";
-				reg = <0x10cd0000 0xc0>;
-				#address-cells = <1>;
-				#size-cells = <0>;
-				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_6>,
-					 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_6>;
-				clock-names = "hsi2c", "hsi2c_pclk";
-				interrupts = <GIC_SPI 661 IRQ_TYPE_LEVEL_HIGH 0>;
-				pinctrl-0 = <&hsi2c13_bus>;
-				pinctrl-names = "default";
-				status = "disabled";
-			};
 
 			serial_13: serial@10cd0000 {
 				compatible = "google,zuma-uart", "google,gs101-uart";
@@ -1640,6 +1625,61 @@
 				clock-names = "spi", "spi_busclk0";
 				interrupts = <GIC_SPI 661 IRQ_TYPE_LEVEL_HIGH 0>;
 				pinctrl-0 = <&spi13_bus>;
+				pinctrl-names = "default";
+				status = "disabled";
+			};
+		};
+
+		usi15: usi@10ce00c0 {
+			compatible = "google,zuma-usi", "samsung,exynos850-usi";
+			reg = <0x10ce00c0 0x20>;
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_15>,
+				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_8>;
+			clock-names = "pclk", "ipclk";
+			samsung,sysreg = <&sysreg_peric1 0x18>;
+			status = "disabled";
+
+			hsi2c_13: i2c@10ce0000 {
+				compatible = "google,zuma-hsi2c",
+					     "samsung,exynosautov9-hsi2c";
+				reg = <0x10ce0000 0xc0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_8>,
+					 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_15>;
+				clock-names = "hsi2c", "hsi2c_pclk";
+				interrupts = <GIC_SPI 662 IRQ_TYPE_LEVEL_HIGH 0>;
+				pinctrl-0 = <&hsi2c15_bus>;
+				pinctrl-names = "default";
+				status = "disabled";
+			};
+
+			serial_15: serial@10ce0000 {
+				compatible = "google,zuma-uart", "google,gs101-uart";
+				reg = <0x10ce0000 0xc0>;
+				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_15>,
+					 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_8>;
+				clock-names = "uart", "clk_uart_baud0";
+				interrupts = <GIC_SPI 662 IRQ_TYPE_LEVEL_HIGH 0>;
+				pinctrl-0 = <&uart15_bus_single>;
+				pinctrl-names = "default";
+				samsung,uart-fifosize = <64>;
+				status = "disabled";
+			};
+
+			spi_15: spi@10ce0000 {
+				compatible = "google,zuma-spi", "google,gs101-spi";
+				reg = <0x10ce0000 0x30>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_15>,
+					 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_8>;
+				clock-names = "spi", "spi_busclk0";
+				interrupts = <GIC_SPI 662 IRQ_TYPE_LEVEL_HIGH 0>;
+				pinctrl-0 = <&spi15_bus>;
 				pinctrl-names = "default";
 				status = "disabled";
 			};
@@ -1712,7 +1752,7 @@
 		};
 
 		pinctrl_hsi1: pinctrl@12040000 {
-			compatible = "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x12040000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
@@ -1739,7 +1779,7 @@
 		};
 
 		pinctrl_hsi2: pinctrl@13040000 {
-			compatible = "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x13040000 0x00001000>;
 			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_GPIO_HSI2_PCLK>;
 			clock-names = "pclk";
@@ -1747,7 +1787,7 @@
 		};
 
 		pinctrl_hsi2ufs: pinctrl@13060000 {
-			compatible = "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x13060000 0x00001000>;
 			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_GPIO_HSI2_PCLK>;
 			clock-names = "pclk";
@@ -1842,7 +1882,7 @@
 		};
 
 		pinctrl_gpio_alive: pinctrl@154d0000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x154d0000 0x00001000>;
 			clocks = <&cmu_apm CLK_GOUT_APM_APBIF_GPIO_ALIVE_PCLK>;
 			clock-names = "pclk";
@@ -1856,7 +1896,7 @@
 		};
 
 		pinctrl_gpio_custom_alive: pinctrl@15060000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x15060000 0x00001000>;
 			clocks = <&cmu_apm CLK_GOUT_APM_APBIF_GPIO_ALIVE_PCLK>;
 			clock-names = "pclk";
@@ -1875,7 +1915,7 @@
 		};
 
 		pinctrl_far_alive: pinctrl@154e0000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x154e0000 0x00001000>;
 			clocks = <&cmu_apm CLK_GOUT_APM_APBIF_GPIO_FAR_ALIVE_PCLK>;
 			clock-names = "pclk";
@@ -1897,7 +1937,7 @@
 		};
 
 		pinctrl_gsactrl: pinctrl@16140000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x16140000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
@@ -1905,7 +1945,7 @@
 		};
 
 		pinctrl_gsacore0: pinctrl@16280000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x16280000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
@@ -1914,7 +1954,7 @@
 		};
 
 		pinctrl_gsacore1: pinctrl@16290000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x16290000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
@@ -1923,7 +1963,7 @@
 		};
 
 		pinctrl_gsacore2: pinctrl@162a0000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x162a0000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
@@ -1932,7 +1972,7 @@
 		};
 
 		pinctrl_gsacore3: pinctrl@162b0000 {
-			compatible = "google,zuma-pinctrl", "google,gs101-pinctrl";
+			compatible = "google,zuma-pinctrl";
 			reg = <0x162b0000 0x00001000>;
 			/* TODO: update once support for this CMU exists */
 			clocks = <0>;
