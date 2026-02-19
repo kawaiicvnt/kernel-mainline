@@ -74,6 +74,9 @@ static const struct of_device_id exynos_clkout_ids[] = {
 		.compatible = "samsung,exynos5420-pmu",
 		.data = &exynos_clkout_exynos5,
 	}, {
+		.compatible = "google,gs101-pmu",
+		.data = &exynos_clkout_exynos5,
+	}, {
 		.compatible = "samsung,exynos5433-pmu",
 		.data = &exynos_clkout_exynos5,
 	}, { }

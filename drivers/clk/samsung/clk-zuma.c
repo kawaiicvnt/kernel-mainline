@@ -3962,8 +3962,8 @@ static const struct samsung_cmu_info peric0_cmu_info __initconst = {
 /* ---- CMU_PERIC1 ---------------------------------------------------------- */
 
 /* Register Offset definitions for CMU_PERIC1 (0x10c00000) */
-#define PLL_CON0_MUX_CLKCMU_PERIC1_BUS_USER						0x0600
-#define PLL_CON1_MUX_CLKCMU_PERIC1_BUS_USER						0x0604
+#define PLL_CON0_MUX_CLKCMU_PERIC1_BUS_USER						0x0610
+#define PLL_CON1_MUX_CLKCMU_PERIC1_BUS_USER						0x0614
 #define PLL_CON0_MUX_CLKCMU_PERIC1_I3C_USER						0x600
 #define PLL_CON1_MUX_CLKCMU_PERIC1_I3C_USER						0x604
 #define PLL_CON0_MUX_CLKCMU_PERIC1_USI0_USI_USER					0x620
@@ -4026,13 +4026,13 @@ static const struct samsung_cmu_info peric0_cmu_info __initconst = {
 #define QCH_CON_LHM_AXI_P_PERIC1_QCH							0x3014
 #define QCH_CON_PERIC1_CMU_PERIC1_QCH							0x3028
 #define QCH_CON_PERIC1_TOP0_QCH_I3C0							0x301c
-#define QCH_CON_PERIC1_TOP0_QCH_PWM							0x3020
-#define QCH_CON_PERIC1_TOP0_QCH_USI0_USI						0x3024
-#define QCH_CON_PERIC1_TOP0_QCH_USI10_USI						0x3028
-#define QCH_CON_PERIC1_TOP0_QCH_USI11_USI						0x302c
-#define QCH_CON_PERIC1_TOP0_QCH_USI12_USI						0x3030
-#define QCH_CON_PERIC1_TOP0_QCH_USI13_USI						0x3034
-#define QCH_CON_PERIC1_TOP0_QCH_USI9_USI						0x3038
+#define QCH_CON_PERIC1_TOP0_QCH_PWM							0x302c
+#define QCH_CON_PERIC1_TOP0_QCH_USI0_USI						0x3038
+#define QCH_CON_PERIC1_TOP0_QCH_USI10_USI						0x303c
+#define QCH_CON_PERIC1_TOP0_QCH_USI11_USI						0x3040
+#define QCH_CON_PERIC1_TOP0_QCH_USI12_USI						0x3044
+#define QCH_CON_PERIC1_TOP0_QCH_USI13_USI						0x3048
+#define QCH_CON_PERIC1_TOP0_QCH_USI9_USI						0x3054
 #define QCH_CON_SYSREG_PERIC1_QCH							0x3034
 #define QUEUE_CTRL_REG_BLK_PERIC1_CMU_PERIC1						0x3c00
 
