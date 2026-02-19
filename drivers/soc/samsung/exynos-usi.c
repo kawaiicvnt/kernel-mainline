@@ -54,6 +54,8 @@ enum exynos_usi_ver {
 struct exynos_usi_variant {
 	enum exynos_usi_ver ver;	/* USI IP-core version */
 	unsigned int sw_conf_mask;	/* SW_CONF mask for all protocols */
+	bool sw_conf_write_only;	/* SW_CONF cannot be safely read on some SoCs */
+	bool skip_ip_init;		/* don't touch USI IP clocks/registers */
 	size_t min_mode;		/* first index in exynos_usi_modes[] */
 	size_t max_mode;		/* last index in exynos_usi_modes[] */
 	size_t num_clks;		/* number of clocks to assert */
@@ -67,6 +69,7 @@ struct exynos_usi {
 
 	size_t mode;			/* current USI SW_CONF mode index */
 	bool clkreq_on;			/* always provide clock to IP */
+	bool skip_sw_conf;		/* don't touch SW_CONF for this instance */
 
 	/* System Register */
 	struct regmap *sysreg;		/* System Register map */
@@ -102,6 +105,8 @@ static const char * const exynos850_usi_clk_names[] = { "pclk", "ipclk" };
 static const struct exynos_usi_variant exynos850_usi_data = {
 	.ver		= USI_VER2,
 	.sw_conf_mask	= USI_V2_SW_CONF_MASK,
+	.sw_conf_write_only = false,
+	.skip_ip_init	= false,
 	.min_mode	= USI_MODE_NONE,
 	.max_mode	= USI_MODE_I2C,
 	.num_clks	= ARRAY_SIZE(exynos850_usi_clk_names),
@@ -111,14 +116,37 @@ static const struct exynos_usi_variant exynos850_usi_data = {
 static const struct exynos_usi_variant exynos8895_usi_data = {
 	.ver		= USI_VER1,
 	.sw_conf_mask	= USI_V1_SW_CONF_MASK,
+	.sw_conf_write_only = false,
+	.skip_ip_init	= false,
 	.min_mode	= USI_MODE_NONE,
 	.max_mode	= USI_MODE_UART_I2C1,
 	.num_clks	= ARRAY_SIZE(exynos850_usi_clk_names),
 	.clk_names	= exynos850_usi_clk_names,
 };
 
+static const struct exynos_usi_variant zuma_usi_data = {
+	.ver		= USI_VER2,
+	.sw_conf_mask	= USI_V2_SW_CONF_MASK,
+	/*
+	 * Some zuma USI SW_CONF registers can fault on read even when write is
+	 * valid; use a direct write path for mode selection.
+	 */
+	.sw_conf_write_only = true,
+	/*
+	 * Leave IP-level clock/reset handling to child protocol drivers.
+	 */
+	.skip_ip_init	= true,
+	.min_mode	= USI_MODE_NONE,
+	.max_mode	= USI_MODE_I2C,
+	.num_clks	= ARRAY_SIZE(exynos850_usi_clk_names),
+	.clk_names	= exynos850_usi_clk_names,
+};
+
 static const struct of_device_id exynos_usi_dt_match[] = {
 	{
+		.compatible = "google,zuma-usi",
+		.data = &zuma_usi_data,
+	}, {
 		.compatible = "samsung,exynos850-usi",
 		.data = &exynos850_usi_data,
 	}, {
@@ -147,8 +175,11 @@ static int exynos_usi_set_sw_conf(struct exynos_usi *usi, size_t mode)
 		return -EINVAL;
 
 	val = exynos_usi_modes[usi->data->ver][mode].val;
-	ret = regmap_update_bits(usi->sysreg, usi->sw_conf,
-				 usi->data->sw_conf_mask, val);
+	if (usi->data->sw_conf_write_only)
+		ret = regmap_write(usi->sysreg, usi->sw_conf, val);
+	else
+		ret = regmap_update_bits(usi->sysreg, usi->sw_conf,
+					 usi->data->sw_conf_mask, val);
 	if (ret)
 		return ret;
 
@@ -202,9 +233,14 @@ static int exynos_usi_configure(struct exynos_usi *usi)
 {
 	int ret;
 
-	ret = exynos_usi_set_sw_conf(usi, usi->mode);
-	if (ret)
-		return ret;
+	if (!usi->skip_sw_conf) {
+		ret = exynos_usi_set_sw_conf(usi, usi->mode);
+		if (ret)
+			return ret;
+	}
+
+	if (usi->data->skip_ip_init)
+		return 0;
 
 	if (usi->data->ver == USI_VER1)
 		ret = clk_bulk_prepare_enable(usi->data->num_clks,
@@ -220,6 +256,9 @@ static void exynos_usi_unconfigure(void *data)
 	struct exynos_usi *usi = data;
 	u32 val;
 	int ret;
+
+	if (usi->data->skip_ip_init)
+		return;
 
 	if (usi->data->ver == USI_VER1) {
 		clk_bulk_disable_unprepare(usi->data->num_clks, usi->clks);
@@ -262,6 +301,7 @@ static int exynos_usi_parse_dt(struct device_node *np, struct exynos_usi *usi)
 		return PTR_ERR(usi->sysreg);
 
 	usi->clkreq_on = of_property_read_bool(np, "samsung,clkreq-on");
+	usi->skip_sw_conf = of_property_read_bool(np, "samsung,skip-sw-conf");
 
 	return 0;
 }

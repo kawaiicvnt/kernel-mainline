@@ -85,6 +85,7 @@ kernel::of_device_table!(
     <TyrDriver as platform::Driver>::IdInfo,
     [
         (of::DeviceId::new(c"rockchip,rk3588-mali"), ()),
+        (of::DeviceId::new(c"google,zuma-mali"), ()),
         (of::DeviceId::new(c"arm,mali-valhall-csf"), ())
     ]
 );
