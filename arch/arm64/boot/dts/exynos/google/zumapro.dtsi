@@ -520,6 +520,10 @@
 			mboxes = <&ap2apm_mailbox>;
 			shmem = <&apm_sram>;
 		};
+
+		trng {
+			compatible = "arm,smccc-trng";
+		};
 	};
 
 	pmu-0 {
@@ -677,7 +681,7 @@
 			clocks = <&cmu_top CLK_DOUT_CMU_MISC_BUS>,
 				 <&cmu_top CLK_DOUT_CMU_MISC_SSS>;
 			clock-names = "bus", "sss";
-			// samsung,sysreg = <&sysreg_misc>;
+			samsung,sysreg = <&sysreg_misc>;
 		};
 
 		sysreg_misc: syscon@10030000 {
@@ -730,15 +734,6 @@
 			status = "disabled";
 		};
 
-		trng: rng@10141400 {
-			compatible = "google,gs101-trng",
-				     "samsung,exynos850-trng";
-			reg = <0x10141400 0x100>;
-			clocks = <&cmu_misc CLK_GOUT_MISC_SSS_I_ACLK>,
-				 <&cmu_misc CLK_GOUT_MISC_SSS_I_PCLK>;
-			clock-names = "secss", "pclk";
-		};
-
 		gic: interrupt-controller@10400000 {
 			compatible = "arm,gic-v3";
 			#interrupt-cells = <4>;
@@ -770,12 +765,12 @@
 				 <&cmu_top CLK_DOUT_CMU_PERIC0_BUS>,
 				 <&cmu_top CLK_DOUT_CMU_PERIC0_IP>;
 			clock-names = "oscclk", "bus", "ip";
-			// samsung,sysreg = <&sysreg_peric0>;
+			samsung,sysreg = <&sysreg_peric0>;
 		};
 
-		sysreg_peric0: syscon@10821000 {
+		sysreg_peric0: syscon@10820000 {
 			compatible = "google,gs101-peric0-sysreg", "syscon";
-			reg = <0x10821000 0x1000>;
+			reg = <0x10820000 0x10000>;
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_SYSREG_PERIC0_PCLK>;
 		};
 
@@ -796,7 +791,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_0>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_0>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x0>;
+			samsung,sysreg = <&sysreg_peric0 0x1000>;
 			status = "disabled";
 
 			hsi2c_1: i2c@10880000 {
@@ -851,7 +846,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_1>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_1>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x4>;
+			samsung,sysreg = <&sysreg_peric0 0x1004>;
 			status = "disabled";
 
 			hsi2c_2: i2c@10890000 {
@@ -906,7 +901,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_2>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x8>;
+			samsung,sysreg = <&sysreg_peric0 0x1008>;
 			status = "disabled";
 
 			hsi2c_3: i2c@108a0000 {
@@ -961,7 +956,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_3>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_3>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0xc>;
+			samsung,sysreg = <&sysreg_peric0 0x100c>;
 			status = "disabled";
 
 			hsi2c_4: i2c@108b0000 {
@@ -1016,7 +1011,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_4>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_4>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x10>;
+			samsung,sysreg = <&sysreg_peric0 0x1010>;
 			status = "disabled";
 
 			hsi2c_5: i2c@108c0000 {
@@ -1071,7 +1066,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_PCLK_5>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP0_IPCLK_5>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x14>;
+			samsung,sysreg = <&sysreg_peric0 0x1014>;
 			status = "disabled";
 
 			hsi2c_6: i2c@108d0000 {
@@ -1128,7 +1123,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_PCLK_0>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_IPCLK_0>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x20>;
+			samsung,sysreg = <&sysreg_peric0 0x1020>;
 			samsung,mode = <USI_MODE_UART>;
 			status = "disabled";
 
@@ -1155,7 +1150,7 @@
 			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_PCLK_2>,
 				 <&cmu_peric0 CLK_GOUT_PERIC0_PERIC0_TOP1_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric0 0x28>;
+			samsung,sysreg = <&sysreg_peric0 0x1028>;
 			status = "disabled";
 
 			hsi2c_14: i2c@10980000 {
@@ -1209,12 +1204,12 @@
 				 <&cmu_top CLK_DOUT_CMU_PERIC1_BUS>,
 				 <&cmu_top CLK_DOUT_CMU_PERIC1_IP>;
 			clock-names = "oscclk", "bus", "ip";
-			// samsung,sysreg = <&sysreg_peric1>;
+			samsung,sysreg = <&sysreg_peric1>;
 		};
 
-		sysreg_peric1: syscon@10c21000 {
+		sysreg_peric1: syscon@10c20000 {
 			compatible = "google,gs101-peric1-sysreg", "syscon";
-			reg = <0x10c21000 0x1000>;
+			reg = <0x10c20000 0x10000>;
 		};
 
 
@@ -1235,7 +1230,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_1>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_1>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x0>;
+			samsung,sysreg = <&sysreg_peric1 0x1000>;
 			status = "disabled";
 
 			hsi2c_0: i2c@10c80000 {
@@ -1290,7 +1285,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_2>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_2>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x4>;
+			samsung,sysreg = <&sysreg_peric1 0x1004>;
 			status = "disabled";
 
 			hsi2c_9: i2c@10c90000 {
@@ -1345,7 +1340,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_3>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_3>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x8>;
+			samsung,sysreg = <&sysreg_peric1 0x1008>;
 			status = "disabled";
 
 			hsi2c_10: i2c@10ca0000 {
@@ -1400,7 +1395,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_4>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_4>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0xc>;
+			samsung,sysreg = <&sysreg_peric1 0x100c>;
 			status = "disabled";
 
 			hsi2c_11: i2c@10cb0000 {
@@ -1455,7 +1450,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_5>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_5>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x10>;
+			samsung,sysreg = <&sysreg_peric1 0x1010>;
 			status = "disabled";
 
 			hsi2c_12: i2c@10cc0000 {
@@ -1510,7 +1505,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_6>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_6>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x14>;
+			samsung,sysreg = <&sysreg_peric1 0x1014>;
 			status = "disabled";
 
 			serial_13: serial@10cd0000 {
@@ -1550,7 +1545,7 @@
 			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_PCLK_15>,
 				 <&cmu_peric1 CLK_GOUT_PERIC1_PERIC1_TOP0_IPCLK_8>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_peric1 0x18>;
+			samsung,sysreg = <&sysreg_peric1 0x1018>;
 			status = "disabled";
 
 			hsi2c_13: i2c@10ce0000 {
@@ -1751,12 +1746,12 @@
 
 			clocks = <&ext_24_5m>;
 			clock-names = "oscclk";
-			// samsung,sysreg = <&sysreg_apm>;
+			samsung,sysreg = <&sysreg_apm>;
 		};
 
-		sysreg_apm: syscon@154204e0 {
+		sysreg_apm: syscon@15420000 {
 			compatible = "google,zuma-apm-sysreg", "syscon";
-			reg = <0x154204e0 0x10000>;
+			reg = <0x15420000 0x10000>;
 		};
 
 		usi17: usi@155c00c0 {
@@ -1768,7 +1763,7 @@
 			clocks = <&cmu_apm CLK_GOUT_APM_APM_USI0_UART_PCLK>,
 				 <&cmu_apm CLK_GOUT_APM_APM_USI0_UART_IPCLK>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_apm 0x0>;
+			samsung,sysreg = <&sysreg_apm 0x4e0>;
 			samsung,mode = <USI_MODE_UART>;
 			status = "disabled";
 
@@ -1795,7 +1790,7 @@
 			clocks = <&cmu_apm CLK_GOUT_APM_APM_USI1_UART_PCLK>,
 				 <&cmu_apm CLK_GOUT_APM_APM_USI1_UART_IPCLK>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_apm 0x4>;
+			samsung,sysreg = <&sysreg_apm 0x4e4>;
 			samsung,mode = <USI_MODE_UART>;
 			status = "disabled";
 
@@ -1822,7 +1817,7 @@
 			clocks = <&cmu_apm CLK_GOUT_APM_APM_USI0_USI_PCLK>,
 				 <&cmu_apm CLK_GOUT_APM_APM_USI0_USI_IPCLK>;
 			clock-names = "pclk", "ipclk";
-			samsung,sysreg = <&sysreg_apm 0x8>;
+			samsung,sysreg = <&sysreg_apm 0x4e8>;
 			status = "disabled";
 
 			serial_19: serial@155e0000 {
