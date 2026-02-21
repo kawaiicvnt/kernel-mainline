@@ -2141,10 +2141,11 @@
 			clock-names = "oscclk";
 		};
 		
-		gpu: gpu@1c500000 {
+		gpu: gpu@1f000000 {
 			compatible = "google,zuma-mali", "arm,mali-valhall-csf";
-			reg = <0x1c500000 0x5000>;
+			reg = <0x1f000000 0x480000>;
 			clocks = <&ext_24_5m>;
+			clock-names = "core";
 			interrupt-names = "job", "mmu", "gpu";
 			interrupts = <GIC_SPI 420 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 421 IRQ_TYPE_LEVEL_HIGH 0>,
