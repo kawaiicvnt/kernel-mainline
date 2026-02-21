@@ -2141,7 +2141,7 @@
 			status = "disabled";
 		};
 
-		cmu_dpu: clock-controller@1c000000 {
+		cmu_dpu: clock-controller@19400000 {
 			compatible = "google,gs101-cmu-dpu";
 			reg = <0x1c000000 0x10000>;
 			#clock-cells = <1>;
@@ -2152,36 +2152,77 @@
 			samsung,sysreg = <&sysreg_dpu>;
 		};
 
-		sysreg_dpu: syscon@1c020000 {
+		sysreg_dpu: syscon@19420000 {
 			compatible = "google,gs101-dpu-sysreg", "syscon";
-			reg = <0x1c020000 0x10000>;
+			reg = <0x19420000 0x10000>;
 			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
 		};
 
 		/*
-		 * Minimal secondary DSI host scaffold for panel bring-up.
-		 * Full DPU/DECON graph is still TODO in this tree.
+		 * Minimal primary DSI host scaffold for panel bring-up.
+		 * Komodo downstream wiring uses drmdsim0.
 		 */
-		drmdsim1: drmdsim@19450000 {
+		drmdsim0: drmdsim@19440000 {
 			compatible = "samsung,exynos-dsim";
-			reg = <0x19450000 0x300>;
-			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>;
+			reg = <0x19440000 0x300>,
+			      <0x19460100 0x700>,
+			      <0x19460000 0x100>;
+			reg-names = "dsi", "dphy", "dphy-extra";
+			interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>;
 
 			/*
 			 * Bring-up scaffold: use available DPU bus clock for all DSIM
 			 * clock inputs until full DPU clock tree is wired.
 			 */
 			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+				 <&ext_24_5m>,
+				 <&ext_24_5m>,
+				 <&ext_24_5m>;
 			clock-names = "bus", "pll", "byte", "esc";
 
 			vddcore-supply = <&reg_placeholder>;
 			vddio-supply = <&reg_placeholder>;
 
 			samsung,esc-clock-frequency = <20000000>;
-			samsung,pll-clock-frequency = <24576000>;
+			samsung,pll-clock-frequency = <24500000>;
+			samsung,burst-clock-frequency = <1368000000>;
+
+			dsim,id = <0>;
+			dsim_mode = <&dsim_modes>;
+			te_from = <0>;
+			te-gpio = <&gpp0 3 0xf>;
+
+			pinctrl-names = "hw_te_on", "hw_te_off";
+			pinctrl-0 = <&disp_te_pri_on>;
+			pinctrl-1 = <&disp_te_pri_off>;
+
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		/*
+		 * Secondary DSI host scaffold.
+		 */
+		drmdsim1: drmdsim@19450000 {
+			compatible = "samsung,exynos-dsim";
+			reg = <0x19450000 0x300>,
+			      <0x19460900 0x700>,
+			      <0x19460000 0x100>;
+			reg-names = "dsi", "dphy", "dphy-extra";
+			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>;
+
+			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&ext_24_5m>,
+				 <&ext_24_5m>,
+				 <&ext_24_5m>;
+			clock-names = "bus", "pll", "byte", "esc";
+
+			vddcore-supply = <&reg_placeholder>;
+			vddio-supply = <&reg_placeholder>;
+
+			samsung,esc-clock-frequency = <20000000>;
+			samsung,pll-clock-frequency = <24500000>;
 			samsung,burst-clock-frequency = <1368000000>;
 
 			dsim,id = <1>;

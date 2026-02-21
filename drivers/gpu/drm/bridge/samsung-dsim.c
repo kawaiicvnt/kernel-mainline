@@ -353,6 +353,27 @@ static const unsigned int exynos7870_reg_ofs[] = {
 	[DSIM_PHYTIMING2_REG] = 0xBC,
 };
 
+static const unsigned int zuma_reg_ofs[] = {
+	[DSIM_LINK_STATUS_REG] = 0x08,
+	[DSIM_DPHY_STATUS_REG] = 0x1C,
+	[DSIM_SWRST_REG] = 0x04,
+	[DSIM_CLKCTRL_REG] = 0x20,
+	[DSIM_TIMEOUT_REG] = 0x28,
+	[DSIM_ESCMODE_REG] = 0x2C,
+	[DSIM_MDRESOL_REG] = 0x3C,
+	[DSIM_MVPORCH_REG] = 0x104,
+	[DSIM_MHPORCH_REG] = 0x44,
+	[DSIM_MSYNC_REG] = 0x48,
+	[DSIM_CONFIG_REG] = 0x4C,
+	[DSIM_INTSRC_REG] = 0x50,
+	[DSIM_INTMSK_REG] = 0x54,
+	[DSIM_PKTHDR_REG] = 0x58,
+	[DSIM_PAYLOAD_REG] = 0x5C,
+	[DSIM_RXFIFO_REG] = 0x60,
+	[DSIM_SFRCTRL_REG] = 0x64,
+	[DSIM_FIFOCTRL_REG] = 0x68,
+};
+
 enum reg_value_idx {
 	RESET_TYPE,
 	PLL_TIMER,
@@ -645,16 +666,16 @@ static const struct samsung_dsim_driver_data exynos7870_dsi_driver_data = {
 };
 
 static const struct samsung_dsim_driver_data zuma_dsi_driver_data = {
-	.reg_ofs = exynos7870_reg_ofs,
+	.reg_ofs = zuma_reg_ofs,
 	.plltmr_reg = 0xa0,
-	.has_clklane_stop = 1,
+	.has_clklane_stop = 0,
 	.has_sfrctrl = 1,
 	.clk_data = exynos7870_clk_bulk_data,
 	.num_clks = ARRAY_SIZE(exynos7870_clk_bulk_data),
 	.max_freq = 1500,
 	.wait_for_hdr_fifo = 0,
 	.wait_for_reset = 1,
-	.num_bits_resol = 12,
+	.num_bits_resol = 13,
 	.video_mode_bit = 18,
 	.pll_stable_bit = 24,
 	.esc_clken_bit = 16,
@@ -677,6 +698,18 @@ static const struct samsung_dsim_driver_data zuma_dsi_driver_data = {
 	.m_max = 1023,
 	.min_freq = 1050,
 };
+
+#define ZUMA_DPHY_PLL_CON0		0x00
+#define ZUMA_DPHY_PLL_CON1		0x04
+#define ZUMA_DPHY_PLL_CON2		0x08
+#define ZUMA_DPHY_PLL_STAT0		0x40
+
+#define ZUMA_DPHY_PLL_EN		BIT(12)
+#define ZUMA_DPHY_PMS_S(v)		(((v) & 0x7) << 8)
+#define ZUMA_DPHY_PMS_P(v)		(((v) & 0x3f) << 0)
+#define ZUMA_DPHY_PMS_M(v)		((v) & 0x3ff)
+#define ZUMA_DPHY_PMS_K(v)		((v) & 0xffff)
+#define ZUMA_DPHY_PLL_LOCKED		BIT(0)
 
 static const struct samsung_dsim_driver_data imx8mm_dsi_driver_data = {
 	.reg_ofs = exynos5433_reg_ofs,
@@ -853,6 +886,28 @@ static unsigned long samsung_dsim_set_pll(struct samsung_dsim *dsi,
 	}
 	dev_dbg(dsi->dev, "PLL freq %lu, (p %d, m %d, s %d)\n", fout, p, m, s);
 
+	if (dsi->plat_data->hw_type == DSIM_TYPE_ZUMA && dsi->dphy_reg_base) {
+		timeout = 3000;
+
+		writel(ZUMA_DPHY_PMS_K(0), dsi->dphy_reg_base + ZUMA_DPHY_PLL_CON1);
+		writel(ZUMA_DPHY_PMS_M(m), dsi->dphy_reg_base + ZUMA_DPHY_PLL_CON2);
+		reg = readl(dsi->dphy_reg_base + ZUMA_DPHY_PLL_CON0);
+		reg &= ~(ZUMA_DPHY_PMS_S(0x7) | ZUMA_DPHY_PMS_P(0x3f));
+		reg |= ZUMA_DPHY_PMS_S(s) | ZUMA_DPHY_PMS_P(p) | ZUMA_DPHY_PLL_EN;
+		writel(reg, dsi->dphy_reg_base + ZUMA_DPHY_PLL_CON0);
+
+		do {
+			if (timeout-- == 0) {
+				dev_err(dsi->dev, "PLL failed to stabilize\n");
+				return 0;
+			}
+			reg = readl(dsi->dphy_reg_base + ZUMA_DPHY_PLL_STAT0);
+		} while (!(reg & ZUMA_DPHY_PLL_LOCKED));
+
+		dsi->hs_clock = fout;
+		return fout;
+	}
+
 	writel(driver_data->reg_values[PLL_TIMER],
 	       dsi->reg_base + driver_data->plltmr_reg);
 
@@ -965,7 +1020,7 @@ static void samsung_dsim_set_phy_ctrl(struct samsung_dsim *dsi)
 	int hs_exit, hs_prepare, hs_zero, hs_trail;
 	unsigned long long byte_clock = dsi->hs_clock / 8;
 
-	if (driver_data->has_freqband)
+	if (driver_data->has_freqband || dsi->plat_data->hw_type == DSIM_TYPE_ZUMA)
 		return;
 
 	phy_mipi_dphy_get_default_config_for_hsclk(dsi->hs_clock,
@@ -2201,6 +2256,16 @@ int samsung_dsim_probe(struct platform_device *pdev)
 	dsi->reg_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dsi->reg_base))
 		return PTR_ERR(dsi->reg_base);
+
+	if (dsi->plat_data->hw_type == DSIM_TYPE_ZUMA) {
+		dsi->dphy_reg_base = devm_platform_ioremap_resource_byname(pdev, "dphy");
+		if (IS_ERR(dsi->dphy_reg_base))
+			return PTR_ERR(dsi->dphy_reg_base);
+
+		dsi->dphy_extra_reg_base = devm_platform_ioremap_resource_byname(pdev, "dphy-extra");
+		if (IS_ERR(dsi->dphy_extra_reg_base))
+			return PTR_ERR(dsi->dphy_extra_reg_base);
+	}
 
 	dsi->phy = devm_phy_optional_get(dev, "dsim");
 	if (IS_ERR(dsi->phy)) {

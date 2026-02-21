@@ -140,10 +140,6 @@ static int google_km4_on(struct google_km4 *ctx)
 	/* Enable TE */
 	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 
-	/* CASET/PASET for 1344x2992 */
-	mipi_dsi_dcs_set_column_address_multi(&dsi_ctx, 0x0000, 0x053f);
-	mipi_dsi_dcs_set_page_address_multi(&dsi_ctx, 0x0000, 0x0baf);
-
 	km4_test_key_on_lvl2(&dsi_ctx);
 
 	/* FFC: off, 165MHz, MIPI speed 1368 Mbps */
@@ -318,7 +314,7 @@ static int google_km4_probe(struct mipi_dsi_device *dsi)
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM;
+	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
 	ctx->panel.prepare_prev_first = true;
 
