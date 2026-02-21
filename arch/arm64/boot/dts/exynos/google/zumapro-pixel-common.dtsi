@@ -107,22 +107,104 @@
 };
 
 &acpm_ipc {
-	pmic {
-		compatible = "samsung,s2mpg10-pmic";
-		interrupts-extended = <&gpa0 6 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pmic_int>;
+	pmic-1 {
+		compatible = "samsung,s2mpg14-pmic";
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH 0>;
 		system-power-controller;
 		wakeup-source;
 
-		clocks {
-			compatible = "samsung,s2mpg10-clk";
-			#clock-cells = <1>;
-			clock-output-names = "rtc32k_ap", "peri32k1",
-					     "peri32k2";
+		regulators {
+			m_buck7_reg: buck7m {
+				/* TPU rail on zumapro */
+				regulator-name = "vdd_tpu";
+				regulator-min-microvolt = <450000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-ramp-delay = <6250>;
+				regulator-always-on;
+			};
+
+			m_ldo5_reg: ldo5m {
+				/* 1.8V always-on rail from main PMIC */
+				regulator-name = "vdd_1p8_main";
+				regulator-min-microvolt = <1600000>;
+				regulator-max-microvolt = <1950000>;
+				regulator-always-on;
+			};
 		};
 
+		s2mpg14_gpio: gpio {
+			compatible = "samsung,s2mpg14-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <6>;
+			gpio-ranges = <&s2mpg14_pinctrl 0 0 6>;
+		};
+
+		s2mpg14_pinctrl: pinctrl {
+		};
+	};
+
+	pmic-2 {
+		compatible = "samsung,s2mpg15-pmic";
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 76 IRQ_TYPE_LEVEL_HIGH 0>;
+		wakeup-source;
+
 		regulators {
+			s_buck2_reg: buck2s {
+				/* GPU */
+				regulator-name = "vdd_g3d";
+				regulator-min-microvolt = <450000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-ramp-delay = <6250>;
+				regulator-always-on;
+			};
+
+			s_buck8_reg: buck8s {
+				/* GPU */
+				regulator-name = "vdd_g3d_l2";
+				regulator-min-microvolt = <450000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-ramp-delay = <6250>;
+				regulator-always-on;
+			};
+
+			s_ldo1_reg: ldo1s {
+				/* GPU */
+				regulator-name = "vdd_g3d_m";
+				regulator-min-microvolt = <700000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-always-on;
+			};
+
+			s_ldo2_reg: ldo2s {
+				/* UFS/MIPI PLL rail on zumapro */
+				regulator-name = "vdd_ufs_pll";
+				regulator-min-microvolt = <700000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-always-on;
+			};
+
+			s_buck11_reg: buck11s {
+				/* VDD_INT_M on zumapro */
+				regulator-name = "vdd_int_m";
+				regulator-min-microvolt = <450000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-ramp-delay = <6250>;
+				regulator-always-on;
+			};
+		};
+
+		s2mpg15_gpio: gpio {
+			compatible = "samsung,s2mpg15-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <10>;
+			gpio-ranges = <&s2mpg15_pinctrl 0 0 10>;
+		};
+
+		s2mpg15_pinctrl: pinctrl {
 		};
 	};
 };
@@ -325,12 +407,6 @@
 };
 
 &pinctrl_gpio_alive {
-	pmic_int: pmic-int-pins {
-		samsung,pins = "gpa0-6";
-		samsung,pin-function = <GS101_PIN_FUNC_EINT>;
-		samsung,pin-pud = <GS101_PIN_PULL_NONE>;
-	};
-
 	key_power: key-power-pins {
 		samsung,pins = "gpa4-0";
 		samsung,pin-function = <GS101_PIN_FUNC_EINT>;
@@ -361,9 +437,23 @@
 	status = "okay";
 };
 
+&gpu {
+	mali-supply = <&s_buck2_reg>;
+	sram-supply = <&s_ldo1_reg>;
+	buck8s-supply = <&s_buck8_reg>;
+	ldo1s-supply = <&s_ldo1_reg>;
+	buck7m-supply = <&s_buck11_reg>;
+};
+
 &ufs_0 {
 	status = "okay";
 	vcc-supply = <&ufs_0_fixed_vcc_reg>;
+	vdd-hba-supply = <&s_ldo2_reg>;
+	vccq-supply = <&s_ldo2_reg>;
+	vccq2-supply = <&m_ldo5_reg>;
+	vcc-max-microamp = <0>;
+	vccq-max-microamp = <0>;
+	vccq2-max-microamp = <0>;
 };
 
 &ufs_0_phy {
