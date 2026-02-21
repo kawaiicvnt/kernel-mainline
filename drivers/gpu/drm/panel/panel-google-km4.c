@@ -5,7 +5,6 @@
  * Based on panel-samsung-s6e3fc2x01.c and downstream Google KM4 panel data.
  */
 
-#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
@@ -40,11 +39,6 @@ static inline struct google_km4 *to_google_km4(struct drm_panel *panel)
 {
 	return container_of(panel, struct google_km4, panel);
 }
-
-#define km4_test_key_on_lvl2(ctx) \
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xf0, 0x5a, 0x5a)
-#define km4_test_key_off_lvl2(ctx) \
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xf0, 0xa5, 0xa5)
 
 /* DSCv1.2a 1344x2992 */
 static const struct drm_dsc_config google_km4_wqhd_pps_config = {
@@ -122,50 +116,9 @@ static void google_km4_reset(struct google_km4 *ctx)
 static int google_km4_on(struct google_km4 *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
-	struct drm_dsc_picture_parameter_set pps;
-
-	/*
-	 * Match downstream sequencing: enable DSC and send PPS before
-	 * EXIT_SLEEP_MODE/init command stream.
-	 */
-	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x9d, 0x01);
-	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
-	mipi_dsi_compression_mode_ext_multi(&dsi_ctx, true,
-					    MIPI_DSI_COMPRESSION_DSC, 0);
 
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 	mipi_dsi_msleep(&dsi_ctx, 120);
-
-	/* Enable TE */
-	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-
-	km4_test_key_on_lvl2(&dsi_ctx);
-
-	/* FFC: off, 165MHz, MIPI speed 1368 Mbps */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x36, 0xc5);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc5,
-				     0x10, 0x10, 0x50, 0x05, 0x4d, 0x31, 0x40,
-				     0x00, 0x40, 0x00, 0x40, 0x00, 0x4d, 0x31,
-				     0x40, 0x00, 0x40, 0x00, 0x40, 0x00, 0x4d,
-				     0x31, 0x40, 0x00, 0x40, 0x00, 0x40, 0x00,
-				     0x4d, 0x31, 0x40, 0x00, 0x40, 0x00, 0x40,
-				     0x00);
-
-	/* Enable OPEC (auto still image detect off) */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x1d, 0x63);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x63, 0x02, 0x18);
-
-	/* PMIC fast discharge off */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x00, 0x13, 0xb1);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb1, 0x80);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf7, 0x0f);
-
-	km4_test_key_off_lvl2(&dsi_ctx);
-
-	/* Enable brightness control from DCS, no CABC */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, 0x20);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_POWER_SAVE, 0x00);
 
 	return dsi_ctx.accum_err;
 }
@@ -253,38 +206,6 @@ static const struct drm_panel_funcs google_km4_panel_funcs = {
 	.get_modes = google_km4_get_modes,
 };
 
-static int google_km4_bl_update_status(struct backlight_device *bl)
-{
-	struct mipi_dsi_device *dsi = bl_get_data(bl);
-	u16 brightness = backlight_get_brightness(bl);
-	int ret;
-
-	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
-
-	ret = mipi_dsi_dcs_set_display_brightness_large(dsi, brightness);
-
-	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
-
-	return ret;
-}
-
-static const struct backlight_ops google_km4_bl_ops = {
-	.update_status = google_km4_bl_update_status,
-};
-
-static struct backlight_device *google_km4_create_backlight(struct mipi_dsi_device *dsi)
-{
-	struct device *dev = &dsi->dev;
-	const struct backlight_properties props = {
-		.type = BACKLIGHT_PLATFORM,
-		.brightness = 1023,
-		.max_brightness = 4095,
-	};
-
-	return devm_backlight_device_register(dev, dev_name(dev), dev, dsi,
-					      &google_km4_bl_ops, &props);
-}
-
 static int google_km4_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
@@ -314,14 +235,12 @@ static int google_km4_probe(struct mipi_dsi_device *dsi)
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS;
+	dsi->mode_flags = MIPI_DSI_MODE_LPM | MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
 	ctx->panel.prepare_prev_first = true;
 
-	ctx->panel.backlight = google_km4_create_backlight(dsi);
-	if (IS_ERR(ctx->panel.backlight))
-		return dev_err_probe(dev, PTR_ERR(ctx->panel.backlight),
-				     "Failed to create backlight\n");
+	/* Backlight DCS writes are disabled during early command-link bring-up. */
+	ctx->panel.backlight = NULL;
 
 	/* This panel only supports DSC; unconditionally enable it. */
 	ctx->dsc = google_km4_wqhd_pps_config;
