@@ -38,7 +38,7 @@
 	st,touch_offload_id = /bits/ 8 <'0' '0' 'o' '6'>;
 };
 
-&drmdsim0 {
+&drmdsim1 {
 	status = "okay";
 
 	google_gs_km4: panel@0 {
