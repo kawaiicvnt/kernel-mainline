@@ -18,30 +18,6 @@
 
 	interrupt-parent = <&gic>;
 
-	dsim_modes: dsim_modes {
-		/*
-		 * Minimal DSI PLL/model table ported from downstream.
-		 * Additional modes can be added per-board as needed.
-		 */
-		pll-input = /bits/ 64 <24576000>;
-		pll-optimum = /bits/ 64 <13000000>;
-		pll-out-range = /bits/ 64 <52000000 6600000000>;
-		pll-vco-range = /bits/ 64 <3300000000 6600000000>;
-		p-range = <1 63>;
-		m-range = <64 1023>;
-		s-range = <0 6>;
-		k-bits = <16>;
-
-		dsim-modes {
-			1344x2992 {
-				mode-name = "1344x2992";
-				pmsk = <0x1 0x6F 0x2 0x5400>;
-				hs-clk = <1368>;
-				esc-clk = <20>;
-			};
-		};
-	};
-
 	aliases {
 		pinctrl0 = &pinctrl_gpio_alive;
 		pinctrl1 = &pinctrl_gpio_custom_alive;
@@ -2156,68 +2132,6 @@
 			compatible = "google,gs101-dpu-sysreg", "syscon";
 			reg = <0x1c020000 0x10000>;
 			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
-		};
-
-		/*
-		 * Minimal secondary DSI host scaffold for panel bring-up.
-		 * Full DPU/DECON graph is still TODO in this tree.
-		 */
-		drmdsim1: drmdsim@19450000 {
-			compatible = "samsung,exynos-dsim";
-			reg = <0x19450000 0x300>;
-			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>;
-
-			/*
-			 * Bring-up scaffold: use available DPU bus clock for all DSIM
-			 * clock inputs until full DPU clock tree is wired.
-			 */
-			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
-			clock-names = "bus", "pll", "byte", "esc";
-
-			vddcore-supply = <&reg_placeholder>;
-			vddio-supply = <&reg_placeholder>;
-
-			samsung,esc-clock-frequency = <20000000>;
-			samsung,pll-clock-frequency = <24576000>;
-			samsung,burst-clock-frequency = <1368000000>;
-
-			dsim,id = <1>;
-			dsim_mode = <&dsim_modes>;
-			te_from = <1>;
-			te-gpio = <&gpp0 4 0xf>;
-
-			pinctrl-names = "hw_te_on", "hw_te_off";
-			pinctrl-0 = <&disp_te_sec_on>;
-			pinctrl-1 = <&disp_te_sec_off>;
-
-			status = "disabled";
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		/*
-		 * Minimal DECON node to provide an LCD CRTC for exynos-dsi
-		 * component binding during bring-up.
-		 */
-		decon0: display-controller@19470000 {
-			compatible = "samsung,exynos7870-decon";
-			reg = <0x19470000 0x8000>;
-			interrupts = <GIC_SPI 243 IRQ_TYPE_LEVEL_HIGH 0>,
-				     <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH 0>,
-				     <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH 0>;
-			interrupt-names = "fifo", "vsync", "lcd_sys";
-
-			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
-			clock-names = "pclk_decon0", "aclk_decon0",
-				      "decon0_eclk", "decon0_vclk";
-
-			status = "disabled";
 		};
 
 		cmu_top: clock-controller@26040000 {
