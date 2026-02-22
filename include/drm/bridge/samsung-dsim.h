@@ -105,8 +105,6 @@ struct samsung_dsim {
 	struct drm_display_mode mode;
 
 	void __iomem *reg_base;
-	void __iomem *dphy_reg_base;
-	void __iomem *dphy_extra_reg_base;
 	struct phy *phy;
 	struct clk *pll_clk;
 	struct regulator_bulk_data supplies[2];
