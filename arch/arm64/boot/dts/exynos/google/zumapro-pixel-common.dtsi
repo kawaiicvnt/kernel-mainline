@@ -519,7 +519,7 @@
 
 &usi11 {
 	samsung,mode = <USI_MODE_SPI>;
-	status = "okay";
+	status = "disabled";
 };
 
 &usi12 {
