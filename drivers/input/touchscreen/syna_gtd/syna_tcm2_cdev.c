@@ -1876,10 +1876,9 @@ static int syna_cdev_open(struct inode *inp, struct file *filp)
 	syna_pal_mutex_unlock(&g_cdev_data.mutex);
 
 	/* Force to use CPU mode in case some command cannot fit the 4 bytes alignment */
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
-	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
-		tcm->hw_if->dma_mode = 0;
-		tcm->hw_if->s3c64xx_sci->dma_mode = CPU_MODE;
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_TOUCHSCREEN_SYNA_TCM2_SPI)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev)) {
+		syna_spi_set_dma_mode(tcm->hw_if, false);
 	}
 #endif
 
@@ -1924,10 +1923,9 @@ static int syna_cdev_release(struct inode *inp, struct file *filp)
 	g_cdev_data.extra_bytes = 0;
 
 	/* Restore DMA mode */
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
-	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
-		tcm->hw_if->dma_mode = 1;
-		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_TOUCHSCREEN_SYNA_TCM2_SPI)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev)) {
+		syna_spi_set_dma_mode(tcm->hw_if, true);
 	}
 #endif
 
@@ -2275,4 +2273,3 @@ void syna_cdev_remove(struct syna_tcm *tcm)
 
 	g_cdev_data.dev = NULL;
 }
-

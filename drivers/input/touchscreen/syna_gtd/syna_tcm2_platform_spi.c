@@ -55,6 +55,12 @@
 
 #define SPI_MODULE_NAME "synaptics_tcm_spi"
 
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS) || IS_ENABLED(CONFIG_SPI_S3C64XX)
+#define SYNA_SPI_DMA_ALIGN_SUPPORTED 1
+#else
+#define SYNA_SPI_DMA_ALIGN_SUPPORTED 0
+#endif
+
 static unsigned char *rx_buf;
 static unsigned char *tx_buf;
 
@@ -63,6 +69,67 @@ static unsigned int buf_size;
 static struct spi_transfer *xfer;
 
 static struct platform_device *syna_spi_device;
+static bool syna_spi_mode_fallback_done;
+
+void syna_spi_set_dma_mode(struct syna_hw_interface *hw_if, bool enable)
+{
+	if (!hw_if)
+		return;
+
+	hw_if->dma_mode = enable;
+
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (hw_if->s3c64xx_sci)
+		hw_if->s3c64xx_sci->dma_mode = enable ? DMA_MODE : CPU_MODE;
+#endif
+}
+
+static int syna_spi_sync_with_recovery(struct syna_hw_interface *hw_if,
+		struct spi_message *msg, unsigned int xfer_len)
+{
+	int retval;
+	int attempt;
+	int mode;
+	int orig_mode;
+	struct spi_device *spi = hw_if->pdev;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+
+	for (attempt = 0; attempt < 3; attempt++) {
+		retval = spi_sync(spi, msg);
+		if (!retval)
+			return 0;
+		syna_pal_sleep_ms(1);
+	}
+
+	if (syna_spi_mode_fallback_done || xfer_len > 4)
+		return retval;
+
+	syna_spi_mode_fallback_done = true;
+	orig_mode = spi->mode & SPI_MODE_X_MASK;
+
+	for (mode = 0; mode < 4; mode++) {
+		if (mode == orig_mode)
+			continue;
+
+		spi->mode = (spi->mode & ~SPI_MODE_X_MASK) | mode;
+		retval = spi_setup(spi);
+		if (retval < 0)
+			continue;
+
+		retval = spi_sync(spi, msg);
+		if (!retval) {
+			bus->spi_mode = mode;
+			LOGW("SPI mode fallback succeeded: %d -> %d\n",
+			     orig_mode, mode);
+			return 0;
+		}
+	}
+
+	spi->mode = (spi->mode & ~SPI_MODE_X_MASK) | orig_mode;
+	spi_setup(spi);
+
+	return retval;
+}
 
 
 /*
@@ -513,8 +580,12 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		attn->irq_gpio = of_get_named_gpio(np,
 				"synaptics,irq-gpio", 0);
 		if (attn->irq_gpio == -EPROBE_DEFER) {
-			LOGW("irq-gpio not ready yet, continue in polling mode\n");
+			LOGW("IRQ gpio provider not ready, continue in polling mode\n");
 			attn->irq_gpio = -1;
+		} else if (attn->irq_gpio < 0) {
+			LOGE("Fail to parse synaptics,irq-gpio: %d\n",
+			     attn->irq_gpio);
+			return attn->irq_gpio;
 		}
 		attn->irq_flags = 0;
 	} else {
@@ -911,7 +982,7 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		goto exit;
 	}
 
-#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#if SYNA_SPI_DMA_ALIGN_SUPPORTED
 	if (hw_if->dma_mode && rd_len >= 64)
 		rd_len = ALIGN(rd_len, 4);
 #endif
@@ -931,7 +1002,7 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		xfer[0].len = rd_len;
 		xfer[0].tx_buf = NULL;
 		xfer[0].rx_buf = rx_buf;
-#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#if SYNA_SPI_DMA_ALIGN_SUPPORTED
 		if (hw_if->dma_mode)
 			xfer[0].bits_per_word = rd_len >= 64 ? 32 : 8;
 #endif
@@ -960,7 +1031,7 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		}
 	}
 
-	retval = spi_sync(spi, &msg);
+	retval = syna_spi_sync_with_recovery(hw_if, &msg, rd_len);
 	if (retval != 0) {
 		LOGE("Failed SPI read xfer: err=%d len=%u dt_mode=%u ctrl_mode=%u max_hz=%u bpw=%u byte_delay=%u block_delay=%u\n",
 		     retval, rd_len, bus->spi_mode, spi->mode, spi->max_speed_hz,
@@ -1019,7 +1090,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		goto exit;
 	}
 
-#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#if SYNA_SPI_DMA_ALIGN_SUPPORTED
 	if (hw_if->dma_mode && wr_len >= 64)
 		wr_len = ALIGN(wr_len, 4);
 #endif
@@ -1045,7 +1116,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = tx_buf;
 		xfer[0].rx_buf = rx_buf;
-#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#if SYNA_SPI_DMA_ALIGN_SUPPORTED
 		if (hw_if->dma_mode)
 			xfer[0].bits_per_word = wr_len >= 64 ? 32 : 8;
 #endif
@@ -1073,7 +1144,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		}
 	}
 
-	retval = spi_sync(spi, &msg);
+	retval = syna_spi_sync_with_recovery(hw_if, &msg, wr_len);
 	if (retval != 0) {
 		LOGE("Failed SPI write xfer: err=%d len=%u dt_mode=%u ctrl_mode=%u max_hz=%u bpw=%u byte_delay=%u block_delay=%u\n",
 		     retval, wr_len, bus->spi_mode, spi->mode, spi->max_speed_hz,
@@ -1610,6 +1681,7 @@ static int syna_spi_probe(struct spi_device *spi)
 	syna_spi_device->dev.of_node = spi->dev.of_node;
 	syna_spi_device->dev.fwnode = dev_fwnode(&spi->dev);
 	syna_spi_device->dev.platform_data = &syna_spi_hw_if;
+	syna_spi_mode_fallback_done = false;
 
 	spi->bits_per_word = 8;
 	spi->rt = true;

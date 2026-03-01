@@ -23,6 +23,8 @@ struct platform_device;
  */
 struct s3c64xx_spi_csinfo {
 	u8 fb_delay;
+	u8 cs_mode;
+	unsigned int cs_delay;
 };
 
 /**
@@ -37,6 +39,7 @@ struct s3c64xx_spi_info {
 	int num_cs;
 	bool no_cs;
 	bool polling;
+	bool swap_mode;
 	int (*cfg_gpio)(void);
 };
 

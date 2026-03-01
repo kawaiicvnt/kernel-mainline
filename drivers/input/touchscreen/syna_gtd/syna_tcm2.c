@@ -2505,11 +2505,10 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 	pm_stay_awake(&tcm->pdev->dev);
 
 	/* Use CPU mode for the firmware update because it cannot fit the 4 bytes alignment.*/
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
-	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_TOUCHSCREEN_SYNA_TCM2_SPI)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev)) {
 		tcm->hw_if->ops_disable_irq_sync(tcm->hw_if);
-		tcm->hw_if->dma_mode = 0;
-		tcm->hw_if->s3c64xx_sci->dma_mode = CPU_MODE;
+		syna_spi_set_dma_mode(tcm->hw_if, false);
 		tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
 	}
 #endif
@@ -2564,11 +2563,10 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 			tcm->force_reflash);
 #endif
 	/* Restore DMA mode */
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_TOUCHSCREEN_SYNA_TCM2_SPI)
 	tcm->hw_if->ops_disable_irq_sync(tcm->hw_if);
-	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
-		tcm->hw_if->dma_mode = 1;
-		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev)) {
+		syna_spi_set_dma_mode(tcm->hw_if, true);
 	}
 	/* Wait 300ms to make sure the SPI driver suspends so that it will
 	 * acquire the DMA channel when it resumes next time because DMA_MODE
