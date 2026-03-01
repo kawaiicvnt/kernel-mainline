@@ -3337,7 +3337,17 @@ static int syna_dev_probe(struct platform_device *pdev)
 
 	tcm->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR_OR_NULL(tcm->pinctrl)) {
-		LOGE("Could not get pinctrl!\n");
+		if (pdev->dev.parent) {
+			tcm->pinctrl = devm_pinctrl_get(pdev->dev.parent);
+			if (IS_ERR_OR_NULL(tcm->pinctrl))
+				LOGE("Could not get pinctrl from parent device %s (err=%ld)\n",
+				     dev_name(pdev->dev.parent), PTR_ERR(tcm->pinctrl));
+			else
+				syna_pinctrl_configure(tcm, true);
+		} else {
+			LOGE("Could not get pinctrl for %s (err=%ld)\n",
+			     dev_name(&pdev->dev), PTR_ERR(tcm->pinctrl));
+		}
 	} else {
 		syna_pinctrl_configure(tcm, true);
 	}

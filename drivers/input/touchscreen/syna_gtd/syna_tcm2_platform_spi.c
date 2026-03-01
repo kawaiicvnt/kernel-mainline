@@ -512,6 +512,10 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 	if (prop && prop->length) {
 		attn->irq_gpio = of_get_named_gpio(np,
 				"synaptics,irq-gpio", 0);
+		if (attn->irq_gpio == -EPROBE_DEFER) {
+			LOGW("irq-gpio not ready yet, continue in polling mode\n");
+			attn->irq_gpio = -1;
+		}
 		attn->irq_flags = 0;
 	} else {
 		attn->irq_gpio = -1;
@@ -600,6 +604,8 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 	if (prop && prop->length) {
 		rst->reset_gpio = of_get_named_gpio(np,
 				"synaptics,reset-gpio", 0);
+		if (rst->reset_gpio == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
 	} else {
 		rst->reset_gpio = -1;
 	}
@@ -799,6 +805,13 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		hw_if->grip_border_threshold = value;
 	}
 
+	LOGI("DT parsed: irq_gpio=%d reset_gpio=%d spi_mode=%u byte_delay=%u block_delay=%u vdd=%s avdd=%s pwr_delay=%u\n",
+	     attn->irq_gpio, rst->reset_gpio, bus->spi_mode,
+	     bus->spi_byte_delay_us, bus->spi_block_delay_us,
+	     pwr->vdd_reg_name ? pwr->vdd_reg_name : "<none>",
+	     pwr->avdd_reg_name ? pwr->avdd_reg_name : "<none>",
+	     pwr->power_delay_ms);
+
 	return 0;
 }
 #endif
@@ -949,7 +962,10 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 
 	retval = spi_sync(spi, &msg);
 	if (retval != 0) {
-		LOGE("Failed to complete SPI transfer, error = %d\n", retval);
+		LOGE("Failed SPI read xfer: err=%d len=%u dt_mode=%u ctrl_mode=%u max_hz=%u bpw=%u byte_delay=%u block_delay=%u\n",
+		     retval, rd_len, bus->spi_mode, spi->mode, spi->max_speed_hz,
+		     spi->bits_per_word, bus->spi_byte_delay_us,
+		     bus->spi_block_delay_us);
 		goto exit;
 	}
 	retval = syna_pal_mem_cpy(rd_data, data_len, rx_buf, rd_len, data_len);
@@ -1028,6 +1044,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	if (bus->spi_byte_delay_us == 0) {
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = tx_buf;
+		xfer[0].rx_buf = rx_buf;
 #if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
 		if (hw_if->dma_mode)
 			xfer[0].bits_per_word = wr_len >= 64 ? 32 : 8;
@@ -1043,6 +1060,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		for (idx = 0; idx < wr_len; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &tx_buf[idx];
+			xfer[idx].rx_buf = &rx_buf[idx];
 #ifndef SPI_NO_DELAY_USEC
 			xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
 			xfer[idx].delay.value = bus->spi_byte_delay_us;
@@ -1057,7 +1075,10 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 
 	retval = spi_sync(spi, &msg);
 	if (retval != 0) {
-		LOGE("Fail to complete SPI transfer, error = %d\n", retval);
+		LOGE("Failed SPI write xfer: err=%d len=%u dt_mode=%u ctrl_mode=%u max_hz=%u bpw=%u byte_delay=%u block_delay=%u\n",
+		     retval, wr_len, bus->spi_mode, spi->mode, spi->max_speed_hz,
+		     spi->bits_per_word, bus->spi_byte_delay_us,
+		     bus->spi_block_delay_us);
 		goto exit;
 	}
 
@@ -1281,10 +1302,12 @@ static int syna_spi_get_regulator(struct syna_hw_interface *hw_if,
 		pwr->vdd_reg_dev = regulator_get(dev, pwr->vdd_reg_name);
 #endif
 		if (IS_ERR((struct regulator *)pwr->vdd_reg_dev)) {
-			LOGW("Vdd regulator is not ready\n");
+			LOGW("Vdd regulator '%s' is not ready\n",
+			     pwr->vdd_reg_name ? pwr->vdd_reg_name : "<none>");
 			retval = PTR_ERR((struct regulator *)pwr->vdd_reg_dev);
 			goto exit;
 		}
+		LOGI("Vdd regulator acquired: %s\n", pwr->vdd_reg_name);
 	}
 
 	if (pwr->avdd_reg_name != NULL && *pwr->avdd_reg_name != 0) {
@@ -1294,10 +1317,12 @@ static int syna_spi_get_regulator(struct syna_hw_interface *hw_if,
 		pwr->avdd_reg_dev = regulator_get(dev, pwr->avdd_reg_name);
 #endif
 		if (IS_ERR((struct regulator *)pwr->avdd_reg_dev)) {
-			LOGW("AVdd regulator is not ready\n");
+			LOGW("AVdd regulator '%s' is not ready\n",
+			     pwr->avdd_reg_name ? pwr->avdd_reg_name : "<none>");
 			retval = PTR_ERR((struct regulator *)pwr->avdd_reg_dev);
 			goto regulator_vdd_put;
 		}
+		LOGI("AVdd regulator acquired: %s\n", pwr->avdd_reg_name);
 	}
 
 	return 0;
@@ -1555,7 +1580,9 @@ static int syna_spi_probe(struct spi_device *spi)
 	}
 
 #ifdef CONFIG_OF
-	syna_spi_parse_dt(&syna_spi_hw_if, &spi->dev);
+	retval = syna_spi_parse_dt(&syna_spi_hw_if, &spi->dev);
+	if (retval < 0)
+		return retval;
 #endif
 
 	syna_pal_mutex_alloc(&attn->irq_en_mutex);
@@ -1580,6 +1607,8 @@ static int syna_spi_probe(struct spi_device *spi)
 	syna_spi_hw_if.pdev = spi;
 
 	syna_spi_device->dev.parent = &spi->dev;
+	syna_spi_device->dev.of_node = spi->dev.of_node;
+	syna_spi_device->dev.fwnode = dev_fwnode(&spi->dev);
 	syna_spi_device->dev.platform_data = &syna_spi_hw_if;
 
 	spi->bits_per_word = 8;
@@ -1591,6 +1620,10 @@ static int syna_spi_probe(struct spi_device *spi)
 		LOGE("Fail to set up SPI protocol driver\n");
 		return retval;
 	}
+	LOGI("SPI setup: bus=%d cs=%d mode=%u max_hz=%u bpw=%u\n",
+	     spi->controller ? spi->controller->bus_num : -1,
+	     spi_get_chipselect(spi, 0), spi->mode,
+	     spi->max_speed_hz, spi->bits_per_word);
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	syna_spi_hw_if.dma_mode = goog_check_spi_dma_enabled(spi);
@@ -1661,6 +1694,7 @@ static void syna_spi_remove(struct spi_device *spi)
  * Describe an spi device driver and its related declarations
  */
 static const struct spi_device_id syna_spi_id_table[] = {
+	{"tcm-spi", 0},
 	{SPI_MODULE_NAME, 0},
 	{},
 };
