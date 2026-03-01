@@ -320,6 +320,8 @@ struct syna_hw_interface {
  */
 int syna_hw_interface_init(void);
 
+void syna_spi_set_dma_mode(struct syna_hw_interface *hw_if, bool enable);
+
 /*
  * syna_hw_interface_exit()
  *

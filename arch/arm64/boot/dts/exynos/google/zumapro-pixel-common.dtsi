@@ -640,19 +640,20 @@
 	#size-cells = <0>;
 	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&spi20_bus &spi20_cs_func>;
+	pinctrl-0 = <&spi20_bus &spi20_cs>;
+	cs-gpios = <&gpp23 3 0>;
+	swap-mode = <1>;
 
 	spitouch: touchscreen@0 {
 		#address-cells = <1>;
 		#size-cells = <1>;
-		status = "ok";
+		status = "okay";
 		reg = <0>;
 		compatible = "synaptics,tcm-spi";
 
-		pinctrl-names = "ts_active", "ts_suspend";
-		pinctrl-0 = <&ts_irq &ts_reset
-			     >;
-		pinctrl-1 = <>;
+		pinctrl-names = "default", "ts_active";
+		pinctrl-0 = <&ts_irq &ts_reset>;
+		pinctrl-1 = <&ts_irq &ts_reset>;
 
 		vdd-supply = <&m_ldo25_reg>;
 		avdd-supply = <&m_ldo4_reg>;
@@ -662,7 +663,7 @@
 		synaptics,avdd-name = "avdd";
 		synaptics,vdd-name = "vdd";
 		synaptics,power-delay-ms = <200>;
-		synaptics,irq-gpio = <&gpn0 0 0x2008>; /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
+		synaptics,irq-gpio = <&gpn0 0 0>;
 		synaptics,irq-on-state = <0>;
 		synaptics,reset-gpio = <&gpp1 1 0>;
 		synaptics,reset-on-state = <0>;
@@ -682,8 +683,8 @@
 
 		controller-data {
 			samsung,spi-feedback-delay = <0>;
-			samsung,spi-chip-select-mode = <0>;
-			cs-clock-delay = <2>;
+			samsung,spi-chip-select-mode = <1>;
+			cs-clock-delay = <8>;
 		};
 	};
 };
