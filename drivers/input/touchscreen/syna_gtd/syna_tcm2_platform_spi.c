@@ -580,8 +580,8 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		attn->irq_gpio = of_get_named_gpio(np,
 				"synaptics,irq-gpio", 0);
 		if (attn->irq_gpio == -EPROBE_DEFER) {
-			LOGW("IRQ gpio provider not ready, continue in polling mode\n");
-			attn->irq_gpio = -1;
+			LOGW("IRQ gpio provider not ready, defer probe\n");
+			return -EPROBE_DEFER;
 		} else if (attn->irq_gpio < 0) {
 			LOGE("Fail to parse synaptics,irq-gpio: %d\n",
 			     attn->irq_gpio);
@@ -1115,7 +1115,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	if (bus->spi_byte_delay_us == 0) {
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = tx_buf;
-		xfer[0].rx_buf = rx_buf;
+		xfer[0].rx_buf = NULL;
 #if SYNA_SPI_DMA_ALIGN_SUPPORTED
 		if (hw_if->dma_mode)
 			xfer[0].bits_per_word = wr_len >= 64 ? 32 : 8;
@@ -1131,7 +1131,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		for (idx = 0; idx < wr_len; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &tx_buf[idx];
-			xfer[idx].rx_buf = &rx_buf[idx];
+			xfer[idx].rx_buf = NULL;
 #ifndef SPI_NO_DELAY_USEC
 			xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
 			xfer[idx].delay.value = bus->spi_byte_delay_us;
