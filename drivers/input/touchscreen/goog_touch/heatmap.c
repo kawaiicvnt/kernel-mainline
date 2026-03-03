@@ -209,8 +209,6 @@ static const struct vb2_ops heatmap_queue_ops = {
 	.queue_setup        = heatmap_queue_setup,
 	.buf_queue          = heatmap_buffer_queue,
 	.stop_streaming     = stop_streaming,
-	.wait_prepare       = vb2_ops_wait_prepare,
-	.wait_finish        = vb2_ops_wait_finish,
 };
 
 static const struct vb2_queue heatmap_queue = {
