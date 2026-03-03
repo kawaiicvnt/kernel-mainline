@@ -514,14 +514,10 @@ static void s3c64xx_iowrite_rep(const struct s3c64xx_spi_driver_data *sdd,
 }
 
 static int s3c64xx_enable_datapath(struct s3c64xx_spi_driver_data *sdd,
-				   struct spi_device *spi,
-				   struct spi_transfer *xfer, int dma_mode)
+				    struct spi_transfer *xfer, int dma_mode)
 {
 	void __iomem *regs = sdd->regs;
-	struct s3c64xx_spi_csinfo *cs = spi->controller_data;
-	u8 cs_idx = spi_get_chipselect(spi, 0);
 	u32 modecfg, chcfg;
-	u32 packet_cnt_en;
 	int ret = 0;
 
 	modecfg = readl(regs + S3C64XX_SPI_MODE_CFG);
@@ -538,34 +534,14 @@ static int s3c64xx_enable_datapath(struct s3c64xx_spi_driver_data *sdd,
 		 * as exactly needed.
 		 */
 		chcfg |= S3C64XX_SPI_CH_RXCH_ON;
-
-		/* Downstream-compatible sequence: clear EN, write count, set EN. */
-		packet_cnt_en = readl(regs + S3C64XX_SPI_PACKET_CNT);
-		packet_cnt_en &= ~S3C64XX_SPI_PACKET_CNT_EN;
-		writel(packet_cnt_en, regs + S3C64XX_SPI_PACKET_CNT);
-
-		writel((xfer->len * 8 / sdd->cur_bpw) & S3C64XX_SPI_PACKET_CNT_MASK,
-		       regs + S3C64XX_SPI_PACKET_CNT);
-
-		packet_cnt_en = readl(regs + S3C64XX_SPI_PACKET_CNT);
-		packet_cnt_en |= S3C64XX_SPI_PACKET_CNT_EN;
-		writel(packet_cnt_en, regs + S3C64XX_SPI_PACKET_CNT);
+		writel(((xfer->len * 8 / sdd->cur_bpw) & 0xffff)
+					| S3C64XX_SPI_PACKET_CNT_EN,
+					regs + S3C64XX_SPI_PACKET_CNT);
 	}
 
 	if (xfer->tx_buf != NULL) {
 		sdd->state |= TXBUSY;
 		chcfg |= S3C64XX_SPI_CH_TXCH_ON;
-
-		/*
-		 * Downstream quirk: for controller-managed manual CS with delay,
-		 * push TXCH_ON before writing the FIFO.
-		 */
-		if (!dma_mode && cs && cs->cs_mode == MANUAL_CS_MODE &&
-		    cs->cs_delay && !spi->cs_gpiod[cs_idx]) {
-			writel(chcfg, regs + S3C64XX_SPI_CH_CFG);
-			udelay(cs->cs_delay);
-		}
-
 		if (dma_mode) {
 			modecfg |= S3C64XX_SPI_MODE_TXDMA_ON;
 			ret = s3c64xx_prepare_dma(&sdd->tx_dma, &xfer->tx_sg);
@@ -870,7 +846,6 @@ static int s3c64xx_spi_transfer_one(struct spi_controller *host,
 				    struct spi_transfer *xfer)
 {
 	struct s3c64xx_spi_driver_data *sdd = spi_controller_get_devdata(host);
-	struct s3c64xx_spi_csinfo *cs = spi->controller_data;
 	const unsigned int fifo_len = sdd->fifo_depth;
 	const void *tx_buf = NULL;
 	void *rx_buf = NULL;
@@ -948,17 +923,10 @@ static int s3c64xx_spi_transfer_one(struct spi_controller *host,
 		sdd->state &= ~RXBUSY;
 		sdd->state &= ~TXBUSY;
 
-		if (cs && cs->cs_mode == MANUAL_CS_MODE && !cs->cs_delay &&
-		    !spi->cs_gpiod[spi_get_chipselect(spi, 0)]) {
-			/* Downstream behavior for plain manual CS. */
-			status = s3c64xx_enable_datapath(sdd, spi, xfer, use_dma);
-			if (!status)
-				s3c64xx_spi_set_cs(spi, true);
-		} else {
-			/* Start the signals first (auto CS and delayed manual CS). */
-			s3c64xx_spi_set_cs(spi, true);
-			status = s3c64xx_enable_datapath(sdd, spi, xfer, use_dma);
-		}
+		/* Start the signals */
+		s3c64xx_spi_set_cs(spi, true);
+
+		status = s3c64xx_enable_datapath(sdd, xfer, use_dma);
 
 		spin_unlock_irqrestore(&sdd->lock, flags);
 
