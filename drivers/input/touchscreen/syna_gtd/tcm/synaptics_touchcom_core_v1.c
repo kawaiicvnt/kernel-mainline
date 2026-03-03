@@ -1332,8 +1332,12 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 	tcm_msg->has_extra_rc = true;
 	tcm_dev->msg_data.rc_byte = (unsigned char)default_rc;
 
-	/* the identify report should be the first packet at startup */
-	if (header->code == REPORT_IDENTIFY) {
+	/* the identify report should be the first packet at startup.
+	 * On some SPI controller implementations we can occasionally read
+	 * a spurious high length byte (0xFF) in the raw startup header.
+	 * In that case, fall back to an explicit CMD_IDENTIFY transaction.
+	 */
+	if ((header->code == REPORT_IDENTIFY) && (header->length[1] != 0xff)) {
 		payload_length = syna_pal_le2_to_uint(header->length);
 		tcm_msg->payload_length = payload_length;
 
@@ -1345,6 +1349,10 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 			return -ERR_TCMMSG;
 		}
 	} else {
+		if ((header->code == REPORT_IDENTIFY) && (header->length[1] == 0xff))
+			LOGW("Suspicious startup identify length: %02x %02x, fallback CMD_IDENTIFY\n",
+					header->length[0], header->length[1]);
+
 		/* if not, send an identify command instead */
 		retval = syna_tcm_v1_write_message(tcm_dev,
 				CMD_IDENTIFY,
