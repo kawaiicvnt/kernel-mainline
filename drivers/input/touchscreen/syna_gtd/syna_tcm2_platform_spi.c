@@ -71,6 +71,24 @@ static struct spi_transfer *xfer;
 static struct platform_device *syna_spi_device;
 static bool syna_spi_mode_fallback_done;
 
+static bool syna_spi_bad_startup_header(const unsigned char *buf)
+{
+	if (!buf)
+		return true;
+
+	/* Any fully repeated 4-byte header is suspicious on startup. */
+	if (buf[0] == buf[1] && buf[1] == buf[2] && buf[2] == buf[3])
+		return true;
+
+	/* Common shifted/split marker patterns observed during bring-up. */
+	if ((buf[0] == 0xa5 && buf[2] == 0xff && buf[3] == 0xff) ||
+	    (buf[0] == 0x10 && buf[1] == 0xff &&
+	     buf[2] == 0xff && buf[3] == 0xff))
+		return true;
+
+	return false;
+}
+
 void syna_spi_set_dma_mode(struct syna_hw_interface *hw_if, bool enable)
 {
 	if (!hw_if)
@@ -580,8 +598,8 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		attn->irq_gpio = of_get_named_gpio(np,
 				"synaptics,irq-gpio", 0);
 		if (attn->irq_gpio == -EPROBE_DEFER) {
-			LOGW("IRQ gpio provider not ready, defer probe\n");
-			return -EPROBE_DEFER;
+			LOGW("IRQ gpio provider not ready, continue in polling mode\n");
+			attn->irq_gpio = -1;
 		} else if (attn->irq_gpio < 0) {
 			LOGE("Fail to parse synaptics,irq-gpio: %d\n",
 			     attn->irq_gpio);
@@ -963,7 +981,13 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		unsigned char *rd_data, unsigned int rd_len)
 {
 	int retval;
+	int mode;
+	int orig_mode;
 	unsigned int idx;
+	unsigned int attempt;
+	bool use_dummy_tx = true;
+	bool suspicious_pattern;
+	bool suspicious_header;
 	struct spi_message msg;
 	struct spi_device *spi = hw_if->pdev;
 	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
@@ -999,20 +1023,47 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 	}
 
 	if (bus->spi_byte_delay_us == 0) {
-		xfer[0].len = rd_len;
-		xfer[0].tx_buf = NULL;
-		xfer[0].rx_buf = rx_buf;
+		for (attempt = 0; attempt < 2; attempt++) {
+			spi_message_init(&msg);
+			use_dummy_tx = (attempt == 0);
+			if (use_dummy_tx)
+				syna_pal_mem_set(tx_buf, 0xff, rd_len);
+
+			xfer[0].len = rd_len;
+			xfer[0].tx_buf = use_dummy_tx ? tx_buf : NULL;
+			xfer[0].rx_buf = rx_buf;
 #if SYNA_SPI_DMA_ALIGN_SUPPORTED
-		if (hw_if->dma_mode)
-			xfer[0].bits_per_word = rd_len >= 64 ? 32 : 8;
+			if (hw_if->dma_mode)
+				xfer[0].bits_per_word = rd_len >= 64 ? 32 : 8;
 #endif
 #ifndef SPI_NO_DELAY_USEC
-		if (bus->spi_block_delay_us) {
-			xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
-			xfer[0].delay.value = bus->spi_block_delay_us;
-		}
+			if (bus->spi_block_delay_us) {
+				xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
+				xfer[0].delay.value = bus->spi_block_delay_us;
+			}
 #endif
-		spi_message_add_tail(&xfer[0], &msg);
+			spi_message_add_tail(&xfer[0], &msg);
+
+			retval = syna_spi_sync_with_recovery(hw_if, &msg, rd_len);
+			if (retval != 0)
+				break;
+
+			suspicious_pattern = false;
+			if (rd_len >= 4 &&
+			    rx_buf[0] == rx_buf[1] &&
+			    rx_buf[1] == rx_buf[2] &&
+			    rx_buf[2] == rx_buf[3])
+				suspicious_pattern = true;
+
+			/* Retry once with alternate tx phase for suspicious headers. */
+			if (suspicious_pattern && attempt == 0) {
+				LOGW("Suspicious SPI read pattern %02x %02x %02x %02x, retry w/o dummy tx\n",
+				     rx_buf[0], rx_buf[1], rx_buf[2], rx_buf[3]);
+				continue;
+			}
+
+			break;
+		}
 	} else {
 		tx_buf[0] = 0xff;
 		for (idx = 0; idx < rd_len; idx++) {
@@ -1031,7 +1082,8 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		}
 	}
 
-	retval = syna_spi_sync_with_recovery(hw_if, &msg, rd_len);
+	if (bus->spi_byte_delay_us != 0)
+		retval = syna_spi_sync_with_recovery(hw_if, &msg, rd_len);
 	if (retval != 0) {
 		LOGE("Failed SPI read xfer: err=%d len=%u dt_mode=%u ctrl_mode=%u max_hz=%u bpw=%u byte_delay=%u block_delay=%u\n",
 		     retval, rd_len, bus->spi_mode, spi->mode, spi->max_speed_hz,
@@ -1039,6 +1091,48 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		     bus->spi_block_delay_us);
 		goto exit;
 	}
+
+	/*
+	 * Startup header reads can be malformed when phase/polarity is wrong.
+	 * Sweep SPI mode once for suspicious 4-byte headers.
+	 */
+	suspicious_header = false;
+	if (rd_len == 4) {
+		if (syna_spi_bad_startup_header(rx_buf))
+			suspicious_header = true;
+	}
+
+	if (suspicious_header) {
+		orig_mode = spi->mode & SPI_MODE_X_MASK;
+		for (mode = 0; mode < 4; mode++) {
+			if (mode == orig_mode)
+				continue;
+
+			spi->mode = (spi->mode & ~SPI_MODE_X_MASK) | mode;
+			retval = spi_setup(spi);
+			if (retval < 0)
+				continue;
+
+			retval = syna_spi_sync_with_recovery(hw_if, &msg, rd_len);
+			if (retval != 0)
+				continue;
+
+			if (!syna_spi_bad_startup_header(rx_buf)) {
+				bus->spi_mode = mode;
+				LOGW("SPI mode startup sweep succeeded: %d -> %d (%02x %02x %02x %02x)\n",
+				     orig_mode, mode, rx_buf[0], rx_buf[1], rx_buf[2], rx_buf[3]);
+				break;
+			}
+		}
+
+		if (mode == 4) {
+			spi->mode = (spi->mode & ~SPI_MODE_X_MASK) | orig_mode;
+			spi_setup(spi);
+			LOGW("SPI mode startup sweep could not improve header (%02x %02x %02x %02x)\n",
+			     rx_buf[0], rx_buf[1], rx_buf[2], rx_buf[3]);
+		}
+	}
+
 	retval = syna_pal_mem_cpy(rd_data, data_len, rx_buf, rd_len, data_len);
 	if (retval < 0) {
 		LOGE("Fail to copy rx_buf to rd_data\n");
@@ -1115,7 +1209,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	if (bus->spi_byte_delay_us == 0) {
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = tx_buf;
-		xfer[0].rx_buf = NULL;
+		xfer[0].rx_buf = rx_buf;
 #if SYNA_SPI_DMA_ALIGN_SUPPORTED
 		if (hw_if->dma_mode)
 			xfer[0].bits_per_word = wr_len >= 64 ? 32 : 8;
@@ -1131,7 +1225,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		for (idx = 0; idx < wr_len; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &tx_buf[idx];
-			xfer[idx].rx_buf = NULL;
+			xfer[idx].rx_buf = &rx_buf[idx];
 #ifndef SPI_NO_DELAY_USEC
 			xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
 			xfer[idx].delay.value = bus->spi_byte_delay_us;
@@ -1335,7 +1429,8 @@ static int syna_spi_power_on(struct syna_hw_interface *hw_if,
 		return retval;
 	}
 
-	// syna_pal_sleep_ms(pwr->power_delay_ms);
+	if (en && pwr->power_delay_ms > 0)
+		syna_pal_sleep_ms(pwr->power_delay_ms);
 
 	LOGI("Device power %s\n", (en) ? "on" : "off");
 

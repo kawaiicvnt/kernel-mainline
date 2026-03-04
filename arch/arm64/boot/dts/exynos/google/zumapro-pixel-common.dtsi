@@ -645,8 +645,9 @@
 	#size-cells = <0>;
 	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&spi20_bus &spi20_cs_func>;
-	swap-mode = <1>;
+	pinctrl-0 = <&spi20_bus &spi20_cs>;
+	cs-gpios = <&gpp23 3 GPIO_ACTIVE_LOW>;
+	num-cs = <1>;
 
 	spitouch: touchscreen@0 {
 		#address-cells = <1>;
@@ -662,24 +663,28 @@
 		vdd-supply = <&m_ldo25_reg>;
 		avdd-supply = <&m_ldo4_reg>;
 
-		spi-max-frequency = <10000000>;
+		spi-max-frequency = <1000000>;
 
 		synaptics,avdd-name = "avdd";
 		synaptics,vdd-name = "vdd";
 		synaptics,power-delay-ms = <200>;
+		synaptics,avdd-power-on-delay-ms = <20>;
+		synaptics,vdd-power-on-delay-ms = <20>;
+		synaptics,vdd-power-off-delay-ms = <5>;
+		synaptics,avdd-power-off-delay-ms = <5>;
 		synaptics,irq-gpio = <&gpn0 0 0>;
 		synaptics,irq-on-state = <0>;
 		synaptics,reset-gpio = <&gpp1 1 0>;
 		synaptics,reset-on-state = <0>;
-		synaptics,reset-active-ms = <2>;
-		synaptics,reset-delay-ms = <50>;
+		synaptics,reset-active-ms = <20>;
+		synaptics,reset-delay-ms = <200>;
 		synaptics,spi-mode = <0>;
-		synaptics,spi-byte-delay-us = <0>;
-		synaptics,spi-block-delay-us = <0>;
+		synaptics,spi-byte-delay-us = <1>;
+		synaptics,spi-block-delay-us = <20>;
 
 		goog,coord-filter-enabled;
-		goog,tbn-enabled;
 		goog,manual-heatmap-from-irq;
+		goog,tbn-enabled;
 		goog,v4l2-enabled;
 		goog,offload-enabled;
 		goog,lptw-suppress-coords-enabled;
@@ -687,8 +692,6 @@
 
 		controller-data {
 			samsung,spi-feedback-delay = <0>;
-			samsung,spi-chip-select-mode = <0>;
-			cs-clock-delay = <2>;
 		};
 	};
 };
