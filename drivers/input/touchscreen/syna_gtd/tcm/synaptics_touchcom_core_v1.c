@@ -880,10 +880,27 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 
 	/* check the message header */
 	header = (struct tcm_v1_message_header *)tcm_msg->in.buf;
+	if (header->marker != TCM_V1_MESSAGE_MARKER) {
+		LOGE("Incorrect header marker 0x%02x\n", header->marker);
+		syna_tcm_buf_unlock(&tcm_msg->in);
+		tcm_msg->status_report_code = STATUS_INVALID;
+		tcm_msg->payload_length = 0;
+		retval = -ERR_TCMMSG;
+		goto exit;
+	}
 
 	tcm_msg->status_report_code = header->code;
 
 	tcm_msg->payload_length = syna_pal_le2_to_uint(header->length);
+	if ((tcm_msg->payload_length & 0xffff) == 0xffff) {
+		LOGE("Invalid message length 0x%04x in header\n",
+			tcm_msg->payload_length & 0xffff);
+		syna_tcm_buf_unlock(&tcm_msg->in);
+		tcm_msg->status_report_code = STATUS_INVALID;
+		tcm_msg->payload_length = 0;
+		retval = -ERR_TCMMSG;
+		goto exit;
+	}
 
 	if ((tcm_msg->status_report_code != STATUS_IDLE) ||
 		(tcm_msg->payload_length > 0)) {
@@ -1198,6 +1215,9 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 
 			/* retrieve the message packet back */
 			retval = syna_tcm_v1_read_message(tcm_dev, NULL);
+			/* stop polling if read thread already raised an error */
+			if (ATOMIC_GET(tcm_msg->command_status) == CMD_STATE_ERROR)
+				break;
 			/* keep in polling if still not having a valid resp */
 			if (retval < 0)
 				syna_pal_completion_reset(cmd_completion);
@@ -1300,6 +1320,7 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 		unsigned int size)
 {
 	int retval;
+	bool startup_identify_invalid = false;
 	struct tcm_v1_message_header *header;
 	struct tcm_message_data_blob *tcm_msg = NULL;
 	unsigned int payload_length = 0;
@@ -1332,27 +1353,32 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 	tcm_msg->has_extra_rc = true;
 	tcm_dev->msg_data.rc_byte = (unsigned char)default_rc;
 
-	/* the identify report should be the first packet at startup.
-	 * On some SPI controller implementations we can occasionally read
-	 * a spurious high length byte (0xFF) in the raw startup header.
-	 * In that case, fall back to an explicit CMD_IDENTIFY transaction.
-	 */
-	if ((header->code == REPORT_IDENTIFY) && (header->length[1] != 0xff)) {
+	/* the identify report should be the first packet at startup */
+	if (header->code == REPORT_IDENTIFY) {
 		payload_length = syna_pal_le2_to_uint(header->length);
-		tcm_msg->payload_length = payload_length;
-
-		/* retrieve the startup packet */
-		retval = syna_tcm_v1_continued_read(tcm_dev,
-				payload_length);
-		if (retval < 0) {
-			LOGE("Fail to read in identify info packet\n");
-			return -ERR_TCMMSG;
-		}
-	} else {
-		if ((header->code == REPORT_IDENTIFY) && (header->length[1] == 0xff))
+		/*
+		 * Startup header can occasionally be malformed (for example
+		 * identify length = 0xffff). Fall back to explicit identify
+		 * command instead of failing startup.
+		 */
+		if ((payload_length & 0xffff) == 0xffff) {
 			LOGW("Suspicious startup identify length: %02x %02x, fallback CMD_IDENTIFY\n",
-					header->length[0], header->length[1]);
+				header->length[0], header->length[1]);
+			startup_identify_invalid = true;
+		} else {
+			tcm_msg->payload_length = payload_length;
 
+			/* retrieve the startup packet */
+			retval = syna_tcm_v1_continued_read(tcm_dev,
+					payload_length);
+			if (retval < 0) {
+				LOGW("Fail to read in startup identify packet, fallback CMD_IDENTIFY\n");
+				startup_identify_invalid = true;
+			}
+		}
+	}
+
+	if ((header->code != REPORT_IDENTIFY) || startup_identify_invalid) {
 		/* if not, send an identify command instead */
 		retval = syna_tcm_v1_write_message(tcm_dev,
 				CMD_IDENTIFY,

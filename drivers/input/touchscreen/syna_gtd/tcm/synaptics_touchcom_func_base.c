@@ -373,20 +373,6 @@ int syna_tcm_detect_device(struct tcm_dev *tcm_dev, int protocol,
 			return retval;
 		}
 
-		/* Some SPI controller paths can return a startup header shifted
-		 * by one byte (missing 0xA5 marker), e.g. "10 ff ff ff".
-		 * Reconstruct a v1-style header so protocol detection can
-		 * continue with a real identify command fallback.
-		 */
-		if ((data[0] != 0xa5) && (data[0] >= REPORT_IDENTIFY)) {
-			LOGW("Shifted startup header, reconstructing marker: %02x %02x %02x %02x\n",
-				data[0], data[1], data[2], data[3]);
-			data[3] = data[2];
-			data[2] = data[1];
-			data[1] = data[0];
-			data[0] = 0xa5;
-		}
-
 		LOGD("start-up data: %02x %02x %02x %02x\n",
 				data[0], data[1], data[2], data[3]);
 	}
@@ -1975,3 +1961,4 @@ int syna_tcm_smart_bridge_reset(struct tcm_dev *tcm_dev, int delay)
 exit:
 	return retval;
 }
+
