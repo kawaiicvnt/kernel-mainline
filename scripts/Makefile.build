@@ -42,20 +42,20 @@ include $(srctree)/scripts/Kbuild.include
 include $(srctree)/scripts/Makefile.compiler
 
 # The filename Kbuild has precedence over Makefile
-kbuild-dir := $(if $(filter /%,$(src)),$(src),$(srctree)/$(src))
-kbuild-file := $(or $(wildcard $(kbuild-dir)/Kbuild),$(kbuild-dir)/Makefile)
+kbuild-kfile := $(src)/Kbuild
+kbuild-mfile := $(src)/Makefile
 
 # Sets has-kbuild-options to y if there's a Makefile that defines KBUILD_OPTIONS
-has-kbuild-options := $(if $(wildcard $(kbuild-dir)/Makefile),$(if $(shell grep -E '^KBUILD_OPTIONS\s*[+:]?=' $(kbuild-dir)/Makefile),y,),)
+has-kbuild-options := $(if $(wildcard $(kbuild-mfile)),$(if $(shell grep -E '^KBUILD_OPTIONS\s*[+:]?=' $(kbuild-mfile)),y,),)
 ifeq ($(has-kbuild-options),y)
-ifeq ($(kbuild-file),$(kbuild-dir)/Kbuild)
+ifeq ($(kbuild-file),$(kbuild-kfile))
 ifeq ($(KBUILD_OPTIONS),)
 # Makefile takes precedence over Kbuild if it's going to define KBUILD_OPTIONS
-kbuild-file := $(kbuild-dir)/Makefile
+kbuild-file := $(kbuild-mfile)
 else
 # The Makefile still needs to be included *in addition to* the Kbuild after
 # expansion of KBUILD_OPTIONS. It must be included *before* the Kbuild.
-include $(kbuild-dir)/Makefile
+include $(kbuild-mfile)
 endif
 endif
 endif
@@ -67,7 +67,9 @@ ifneq ($(old-kbuild-options),$(KBUILD_OPTIONS))
 # Reprocess the current directory with KBUILD_OPTIONS passed to make. This
 # Makefile is thus processed twice. Make sure to preserve the original values of
 # need-builtin and need-modorder for the next make invocation.
-subdir-ym := $(src)
+# Re-run this same object directory. Use $(obj), not $(src), so nested
+# invocations do not duplicate $(srcroot) and produce ../../... paths.
+subdir-ym := $(obj)
 ifeq ($(need-builtin),1)
 subdir-builtin := $(subdir-ym)/built-in.a
 endif
@@ -79,6 +81,20 @@ endif
 subdir-kbuild-options := KBUILD_OPTIONS="$(KBUILD_OPTIONS)"
 else # KBUILD_OPTIONS
 include $(srctree)/scripts/Makefile.lib
+
+# Compatibility for downstream external-module style Makefiles included
+# in-tree via KBUILD_OPTIONS.
+# In O= builds, $(src) is typically "$(srcroot)/$(obj)" (e.g. "../foo"),
+# so literal "$(srctree)/$(src)" in downstream flags expands to "../../foo".
+# Normalize it back to the effective source path.
+downstream_src_path := $(src)
+downstream_srctree_src := $(srctree)/$(src)
+EXTRA_AFLAGS := $(subst $(downstream_srctree_src),$(downstream_src_path),$(EXTRA_AFLAGS))
+EXTRA_CFLAGS := $(subst $(downstream_srctree_src),$(downstream_src_path),$(EXTRA_CFLAGS))
+EXTRA_CPPFLAGS := $(subst $(downstream_srctree_src),$(downstream_src_path),$(EXTRA_CPPFLAGS))
+subdir-asflags-y += $(EXTRA_AFLAGS)
+subdir-ccflags-y += $(EXTRA_CFLAGS)
+cppflags-y += $(EXTRA_CPPFLAGS)
 
 # flags that take effect in current and sub directories
 KBUILD_AFLAGS += $(subdir-asflags-y)

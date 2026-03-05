@@ -122,9 +122,11 @@ DTC_FLAGS += $(DTC_FLAGS_$(target-stem))
 # Set -@ if the target is a base DTB that overlay is applied onto
 DTC_FLAGS += $(if $(filter $(patsubst $(obj)/%,%,$@), $(base-dtb-y)), -@)
 
-DTC_INCLUDE := $(srctree)/scripts/dtc/include-prefixes
+# Keep any externally provided include roots (e.g. vendor dt-bindings) and
+# always include the in-tree prefix map used by generic dt-bindings lookups.
+DTC_INCLUDE += $(srctree)/scripts/dtc/include-prefixes
 
-dtc_cpp_flags = -Wp,-MMD,$(depfile).pre.tmp -nostdinc -I $(DTC_INCLUDE) -undef -D__DTS__
+dtc_cpp_flags = -Wp,-MMD,$(depfile).pre.tmp -nostdinc $(addprefix -I ,$(DTC_INCLUDE)) -undef -D__DTS__
 
 dtc-tmp = $(subst $(comma),_,$(dot-target).dts.tmp)
 

@@ -90,6 +90,8 @@ struct kernel_symbol {
 
 #endif
 
+#endif /* !__ASSEMBLY__ */
+
 #if !defined(CONFIG_MODULES) || defined(__DISABLE_EXPORTS) || \
     defined(CONFIG_INTEGRATE_MODULES)
 
