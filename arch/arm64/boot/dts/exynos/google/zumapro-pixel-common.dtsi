@@ -21,7 +21,7 @@
 
 	chosen {
 		/* Bootloader expects bootargs specified otherwise it crashes */
-		bootargs = "earlycon=exynos4210,0x10870000";
+		bootargs = "clk_ignore_unused pd_ignore_unused regulator_ignore_unused earlycon=exynos4210,0x10870000";
 		stdout-path = &serial_0;
 
 		/* Use display framebuffer as setup by bootloader */
@@ -33,11 +33,11 @@
 		};
 	};
 
-	// decon_autorefresh_bit: mmio-init@19470030 {
-	// 	compatible = "linux,mmio-init-helper";
-	// 	reg = <0 0x19470030 0x4>;
-	// 	value = <0x3061>;
-	// };
+	decon_autorefresh_bit: mmio-init@19470030 {
+		compatible = "linux,mmio-init-helper";
+		reg = <0 0x19470030 0x4>;
+		value = <0x3061>;
+	};
 
 	gpio-keys {
 		compatible = "gpio-keys";
