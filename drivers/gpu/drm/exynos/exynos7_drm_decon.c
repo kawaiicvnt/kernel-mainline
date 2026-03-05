@@ -70,12 +70,22 @@ struct decon_context {
 	void __iomem			*regs;
 	unsigned long			irq_flags;
 	bool				i80_if;
+	int				irq_vsync;
+	int				irq_lcd_sys;
 	wait_queue_head_t		wait_vsync_queue;
 	atomic_t			wait_vsync_event;
 
 	const struct decon_data *data;
 	struct drm_encoder *encoder;
 };
+
+static bool decon_use_i80(const struct decon_context *ctx)
+{
+	if (ctx->crtc)
+		return ctx->crtc->i80_mode;
+
+	return ctx->i80_if;
+}
 
 static const struct of_device_id decon_driver_dt_match[] = {
 	{
@@ -205,13 +215,14 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 {
 	struct decon_context *ctx = crtc->ctx;
 	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
+	bool i80 = decon_use_i80(ctx);
 	u32 val, clkdiv;
 
 	/* nothing to do if we haven't set the mode yet */
 	if (mode->htotal == 0 || mode->vtotal == 0)
 		return;
 
-	if (!ctx->i80_if) {
+	if (!i80) {
 		int vsync_len, vbpd, vfpd, hsync_len, hbpd, hfpd;
 	      /* setup vertical timing values. */
 		vsync_len = mode->crtc_vsync_end - mode->crtc_vsync_start;
@@ -266,17 +277,19 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 static int decon_enable_vblank(struct exynos_drm_crtc *crtc)
 {
 	struct decon_context *ctx = crtc->ctx;
+	bool i80 = decon_use_i80(ctx);
 	u32 val;
 
 	if (!test_and_set_bit(0, &ctx->irq_flags)) {
 		val = readl(ctx->regs + VIDINTCON0);
 
 		val |= VIDINTCON0_INT_ENABLE;
-
-		if (!ctx->i80_if) {
+		if (!i80) {
 			val |= VIDINTCON0_INT_FRAME;
 			val &= ~VIDINTCON0_FRAMESEL0_MASK;
 			val |= VIDINTCON0_FRAMESEL0_VSYNC;
+		} else {
+			val &= ~VIDINTCON0_INT_FRAME;
 		}
 
 		writel(val, ctx->regs + VIDINTCON0);
@@ -288,13 +301,14 @@ static int decon_enable_vblank(struct exynos_drm_crtc *crtc)
 static void decon_disable_vblank(struct exynos_drm_crtc *crtc)
 {
 	struct decon_context *ctx = crtc->ctx;
+	bool i80 = decon_use_i80(ctx);
 	u32 val;
 
 	if (test_and_clear_bit(0, &ctx->irq_flags)) {
 		val = readl(ctx->regs + VIDINTCON0);
 
 		val &= ~VIDINTCON0_INT_ENABLE;
-		if (!ctx->i80_if)
+		if (!i80)
 			val &= ~VIDINTCON0_INT_FRAME;
 
 		writel(val, ctx->regs + VIDINTCON0);
@@ -522,20 +536,36 @@ static void decon_atomic_flush(struct exynos_drm_crtc *crtc)
 	exynos_crtc_handle_event(crtc);
 }
 
+static void decon_te_handler(struct exynos_drm_crtc *crtc)
+{
+	struct decon_context *ctx = crtc->ctx;
+
+	drm_crtc_handle_vblank(&ctx->crtc->base);
+
+	/* Wake commit path waiting for next vblank in command-mode setups. */
+	if (atomic_read(&ctx->wait_vsync_event)) {
+		atomic_set(&ctx->wait_vsync_event, 0);
+		wake_up(&ctx->wait_vsync_queue);
+	}
+}
+
 static void decon_init(struct decon_context *ctx)
 {
+	bool i80 = decon_use_i80(ctx);
 	u32 val;
 
 	writel(VIDCON0_SWRESET, ctx->regs + VIDCON0);
 
 	val = VIDOUTCON0_DISP_IF_0_ON;
-	if (!ctx->i80_if)
+	if (i80)
+		val |= VIDOUTCON0_I80IF;
+	else
 		val |= VIDOUTCON0_RGBIF;
 	writel(val, ctx->regs + VIDOUTCON0);
 
 	writel(VCLKCON0_CLKVALUP | VCLKCON0_VCLKFREE, ctx->regs + VCLKCON0);
 
-	if (!ctx->i80_if)
+	if (!i80)
 		writel(VIDCON1_VCLK_HOLD, ctx->regs + VIDCON1(0));
 }
 
@@ -584,19 +614,20 @@ static const struct exynos_drm_crtc_ops decon_crtc_ops = {
 	.update_plane = decon_update_plane,
 	.disable_plane = decon_disable_plane,
 	.atomic_flush = decon_atomic_flush,
+	.te_handler = decon_te_handler,
 };
 
 
 static irqreturn_t decon_irq_handler(int irq, void *dev_id)
 {
 	struct decon_context *ctx = (struct decon_context *)dev_id;
-	u32 val, clear_bit;
+	u32 val, clear_bits;
 
 	val = readl(ctx->regs + VIDINTCON1);
 
-	clear_bit = ctx->i80_if ? VIDINTCON1_INT_I80 : VIDINTCON1_INT_FRAME;
-	if (val & clear_bit)
-		writel(clear_bit, ctx->regs + VIDINTCON1);
+	clear_bits = val & (VIDINTCON1_INT_I80 | VIDINTCON1_INT_FRAME);
+	if (clear_bits)
+		writel(clear_bits, ctx->regs + VIDINTCON1);
 
 	/* check the crtc is detached already from encoder */
 	if (!ctx->drm_dev)
@@ -606,7 +637,7 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_id)
 	if (!drm_dev_has_vblank(ctx->drm_dev))
 		goto out;
 
-	if (!ctx->i80_if) {
+	if (clear_bits) {
 		drm_crtc_handle_vblank(&ctx->crtc->base);
 
 		/* set wait vsync event to zero and wake up queue. */
@@ -732,14 +763,30 @@ static int decon_probe(struct platform_device *pdev)
 		goto err_iounmap;
 	}
 
-	ret =  platform_get_irq_byname(pdev, ctx->i80_if ? "lcd_sys" : "vsync");
-	if (ret < 0)
+	ctx->irq_vsync = platform_get_irq_byname(pdev, "vsync");
+	ctx->irq_lcd_sys = platform_get_irq_byname(pdev, "lcd_sys");
+	if (ctx->irq_vsync < 0 && ctx->irq_lcd_sys < 0) {
+		ret = -ENODEV;
+		dev_err(dev, "no DECON interrupt found\n");
 		goto err_iounmap;
+	}
 
-	ret = devm_request_irq(dev, ret, decon_irq_handler, 0, "drm_decon", ctx);
-	if (ret) {
-		dev_err(dev, "irq request failed.\n");
-		goto err_iounmap;
+	if (ctx->irq_vsync >= 0) {
+		ret = devm_request_irq(dev, ctx->irq_vsync, decon_irq_handler, 0,
+				       "drm_decon_vsync", ctx);
+		if (ret) {
+			dev_err(dev, "vsync irq request failed.\n");
+			goto err_iounmap;
+		}
+	}
+
+	if (ctx->irq_lcd_sys >= 0 && ctx->irq_lcd_sys != ctx->irq_vsync) {
+		ret = devm_request_irq(dev, ctx->irq_lcd_sys, decon_irq_handler, 0,
+				       "drm_decon_lcd_sys", ctx);
+		if (ret) {
+			dev_err(dev, "lcd_sys irq request failed.\n");
+			goto err_iounmap;
+		}
 	}
 
 	init_waitqueue_head(&ctx->wait_vsync_queue);
