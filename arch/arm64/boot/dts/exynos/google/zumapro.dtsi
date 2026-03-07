@@ -3198,16 +3198,11 @@
 		};
 
 		usbdrd31_phy: phy@11100000 {
-			compatible = "google,zuma-usb32drd-phy",
-				     "google,gs101-usb31drd-phy";
+			compatible = "google,gs101-usb31drd-phy";
 			reg = <0x11100000 0x0200>,
-			      <0x11110000 0x0200>,
-			      <0x11120000 0x0200>,
-			      <0x11130000 0x0800>,
-			      <0x11140000 0x2800>,
-			      <0x11210000 0x10000>;
-			reg-names = "blkcon", "eusb_ctrl", "eusb_phy",
-				    "pcs", "pma", "link";
+			      <0x110f0000 0x0800>,
+			      <0x110e0000 0x2800>;
+			reg-names = "phy", "pcs", "pma";
 			clocks = <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_ACLK_PHYCTRL>,
 				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USB20_PHY_REFCLK_26>,
 				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_CTRL_ACLK>,
@@ -3215,20 +3210,7 @@
 				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USBDPPHY_SCL_APB_PCLK>;
 			clock-names = "phy", "ref", "ctrl_aclk", "ctrl_pclk", "scl_pclk";
 			#phy-cells = <1>;
-			phys = <&usbdrd31_eusb2_phy>;
-			phy-names = "hs";
 			samsung,pmu-syscon = <&pmu_system_controller>;
-			status = "disabled";
-		};
-
-		usbdrd31_eusb2_phy: phy@11120000 {
-			compatible = "samsung,exynos2200-eusb2-phy";
-			reg = <0x11120000 0x0200>;
-			clocks = <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USB20_PHY_REFCLK_26>,
-				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_ACLK_PHYCTRL>,
-				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_CTRL_PCLK>;
-			clock-names = "ref", "bus", "ctrl";
-			#phy-cells = <0>;
 			status = "disabled";
 		};
 
