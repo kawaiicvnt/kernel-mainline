@@ -528,6 +528,13 @@
 	};
 };
 
+&usbdrd31_eusb2_phy {
+	/* TODO: Update these once PMIC is implemented */
+	vdd-supply = <&reg_placeholder>;
+	vdda12-supply = <&reg_placeholder>;
+	status = "okay";
+};
+
 &usi_uart {
 	samsung,clkreq-on; /* needed for UART mode */
 	status = "okay";

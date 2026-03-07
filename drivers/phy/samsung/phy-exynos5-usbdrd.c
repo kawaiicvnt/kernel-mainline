@@ -512,6 +512,7 @@ struct exynos5_usbdrd_phy_drvdata {
 struct exynos5_usbdrd_phy {
 	struct device *dev;
 	void __iomem *reg_phy;
+	void __iomem *reg_link;
 	void __iomem *reg_pcs;
 	void __iomem *reg_pma;
 	struct clk_bulk_data *clks;
@@ -1281,7 +1282,7 @@ static void exynos7870_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
 	reg = readl(phy_drd->reg_phy + EXYNOS7870_DRD_HSPHYCTRL);
 	reg |= HSPHYCTRL_PHYSWRST;
 	writel(reg, phy_drd->reg_phy + EXYNOS7870_DRD_HSPHYCTRL);
-	udelay(20);
+	fsleep(20);
 
 	/* Clear the PHY swrst bit */
 	reg = readl(phy_drd->reg_phy + EXYNOS7870_DRD_HSPHYCTRL);
@@ -1359,6 +1360,219 @@ static void exynos2200_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
 {
 	/* Configure non-Samsung IP PHY, responsible for UTMI */
 	phy_init(phy_drd->hs_phy);
+}
+
+static void zuma_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
+{
+	if (!phy_drd->hs_phy) {
+		dev_dbg(phy_drd->dev, "zuma utmi init without external hs phy\n");
+		return;
+	}
+
+	/* Configure non-Samsung eUSB2 PHY, responsible for UTMI */
+	phy_init(phy_drd->hs_phy);
+}
+
+static void zuma_usbcon_init_link(struct exynos5_usbdrd_phy *phy_drd)
+{
+	void __iomem *regs_base = phy_drd->reg_link ?: phy_drd->reg_phy;
+	u32 reg;
+
+	reg = readl(regs_base + EXYNOS850_DRD_LINKCTRL);
+	reg |= BIT(11) | BIT(9) | BIT(10) | BIT(12);
+	reg &= ~LINKCTRL_FORCE_QACT;
+	writel(reg, regs_base + EXYNOS850_DRD_LINKCTRL);
+	fsleep(500);
+
+	reg |= LINKCTRL_FORCE_QACT;
+	reg |= FIELD_PREP(LINKCTRL_BUS_FILTER_BYPASS, 0xf);
+	writel(reg, regs_base + EXYNOS850_DRD_LINKCTRL);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_CLKRST);
+	reg |= CLKRST_LINK_SW_RST;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+	fsleep(10);
+	reg &= ~CLKRST_LINK_SW_RST;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+	reg |= EXYNOS2200_UTMI_FORCE_BVALID | EXYNOS2200_UTMI_FORCE_VBUSVALID;
+	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
+}
+
+static void zuma_usbcon_ready_to_pipe3_phy(struct exynos5_usbdrd_phy *phy_drd)
+{
+	void __iomem *regs_base = phy_drd->reg_link ?: phy_drd->reg_phy;
+	u32 reg;
+
+	reg = readl(regs_base + EXYNOS850_DRD_LINKCTRL);
+	reg &= ~LINKCTRL_FORCE_PIPE_EN;
+	writel(reg, regs_base + EXYNOS850_DRD_LINKCTRL);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_HSP_MISC);
+	reg |= FIELD_PREP(HSP_MISC_RES_TUNE, RES_TUNE_PHY1_PHY2);
+	reg &= ~HSP_MISC_SET_REQ_IN2;
+	writel(reg, regs_base + EXYNOS2200_DRD_HSP_MISC);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_CLKRST);
+	reg |= EXYNOS2200_CLKRST_LINK_PCLK_SEL;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+}
+
+#define ZUMA_SNPS_USBDP_REG_PHY_RST_CTRL	0x0000
+#define ZUMA_SNPS_USBDP_REG_PHY_CR_PARA_CON0	0x0004
+#define ZUMA_SNPS_USBDP_REG_PHY_CONFIG0		0x0100
+#define ZUMA_SNPS_USBDP_REG_PHY_CONFIG2		0x0108
+#define ZUMA_SNPS_USBDP_REG_PHY_SRAM_CON	0x0110
+#define ZUMA_SNPS_USBDP_REG_TCA_CONFIG		0x016c
+#define ZUMA_SNPS_USBDP_REG_DP_CONFIG12		0x0234
+#define ZUMA_SNPS_USBDP_REG_DP_CONFIG13		0x0238
+
+#define ZUMA_SNPS_TCA_CTRLSYNCMODE_CFG0		0x0020
+#define ZUMA_SNPS_TCA_INTR_EN			0x0004
+#define ZUMA_SNPS_TCA_INTR_STS			0x0008
+#define ZUMA_SNPS_TCA_TCPC			0x0014
+
+static void zuma_snps_phy_reset(struct exynos5_usbdrd_phy *phy_drd, bool assert)
+{
+	u32 reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_RST_CTRL);
+
+	if (assert)
+		reg |= BIT(0);
+	else
+		reg &= ~BIT(0);
+
+	reg |= BIT(1);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_RST_CTRL);
+}
+
+static void zuma_snps_lane0_reset(struct exynos5_usbdrd_phy *phy_drd, bool assert)
+{
+	u32 reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_RST_CTRL);
+
+	if (assert)
+		reg &= ~BIT(4);
+	else
+		reg |= BIT(4);
+
+	if (assert)
+		reg |= BIT(5);
+	else
+		reg &= ~BIT(5);
+
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_RST_CTRL);
+}
+
+static void zuma_snps_dptx_reset(struct exynos5_usbdrd_phy *phy_drd, bool assert)
+{
+	u32 reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_DP_CONFIG13);
+
+	reg |= BIT(0) | BIT(1) | BIT(2) | BIT(3);
+	if (assert)
+		reg |= BIT(4) | BIT(5) | BIT(6) | BIT(7);
+	else
+		reg &= ~(BIT(4) | BIT(5) | BIT(6) | BIT(7));
+
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_DP_CONFIG13);
+}
+
+static void zuma_snps_config_mplla(struct exynos5_usbdrd_phy *phy_drd)
+{
+	u32 reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG0);
+
+	reg |= BIT(21);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG0);
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_DP_CONFIG12);
+	reg &= ~(BIT(8) | BIT(9) | BIT(10) | BIT(11));
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_DP_CONFIG12);
+}
+
+static void zuma_snps_phy_initiate(struct exynos5_usbdrd_phy *phy_drd)
+{
+	u32 reg;
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG0);
+	reg |= BIT(1);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG0);
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG2);
+	reg &= ~BIT(24);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CONFIG2);
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CR_PARA_CON0);
+	reg |= BIT(0);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_CR_PARA_CON0);
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_SRAM_CON);
+	reg |= BIT(0);
+	reg &= ~BIT(1);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_PHY_SRAM_CON);
+
+	reg = readl(phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_TCA_CONFIG);
+	if (phy_drd->orientation == TYPEC_ORIENTATION_REVERSE)
+		reg |= BIT(2);
+	else
+		reg &= ~BIT(2);
+	writel(reg, phy_drd->reg_pcs + ZUMA_SNPS_USBDP_REG_TCA_CONFIG);
+}
+
+static int zuma_snps_tca_ctrl_sync(struct exynos5_usbdrd_phy *phy_drd,
+				   u32 mux, u32 low_power_en)
+{
+	u32 reg;
+	int timeout;
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_CTRLSYNCMODE_CFG0);
+	reg &= ~BIT(0);
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_CTRLSYNCMODE_CFG0);
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_STS);
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_STS);
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_EN);
+	reg |= BIT(0) | BIT(1);
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_EN);
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_TCPC);
+	reg &= ~GENMASK(4, 0);
+	reg |= mux;
+	reg &= ~BIT(2);
+	reg |= low_power_en ? BIT(3) : 0;
+	reg |= BIT(4);
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_TCPC);
+
+	for (timeout = 1000; timeout > 0; timeout--) {
+		reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_STS);
+		if (reg & BIT(0))
+			break;
+		udelay(1);
+	}
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_STS);
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_STS);
+
+	reg = readl(phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_EN);
+	reg &= ~(BIT(0) | BIT(1));
+	writel(reg, phy_drd->reg_pma + ZUMA_SNPS_TCA_INTR_EN);
+
+	return timeout > 0 ? 0 : -ETIMEDOUT;
+}
+
+static int zuma_snps_usbdp_phy_enable(struct exynos5_usbdrd_phy *phy_drd)
+{
+	zuma_snps_lane0_reset(phy_drd, true);
+	zuma_snps_phy_reset(phy_drd, true);
+
+	zuma_snps_config_mplla(phy_drd);
+	zuma_snps_dptx_reset(phy_drd, true);
+	zuma_snps_phy_initiate(phy_drd);
+
+	fsleep(20);
+	zuma_snps_phy_reset(phy_drd, false);
+	zuma_snps_lane0_reset(phy_drd, false);
+
+	return zuma_snps_tca_ctrl_sync(phy_drd, 1, 0);
 }
 
 static void exynos2200_usbdrd_link_init(struct exynos5_usbdrd_phy *phy_drd)
@@ -1703,7 +1917,11 @@ static void exynos5_usbdrd_gs101_pipe3_init(struct exynos5_usbdrd_phy *phy_drd)
 	reg |= CMN_REG0008_OVRD_AUX_EN;
 	writel(reg, regs_pma + EXYNOS9_PMA_USBDP_CMN_REG0008);
 
-	exynos5_usbdrd_apply_phy_tunes(phy_drd, PTS_PIPE3_PREINIT);
+	/*
+	 * Zuma PMA preinit writes still trigger asynchronous external aborts on
+	 * some registers (e.g. offset 0x1908). Keep PIPE3 bring-up on the safer
+	 * PCS/init path first and add PMA preinit entries back incrementally.
+	 */
 	exynos5_usbdrd_apply_phy_tunes(phy_drd, PTS_PIPE3_INIT);
 	exynos5_usbdrd_apply_phy_tunes(phy_drd, PTS_PIPE3_POSTINIT);
 
@@ -1717,6 +1935,19 @@ static void exynos5_usbdrd_gs101_pipe3_init(struct exynos5_usbdrd_phy *phy_drd)
 
 	if (!exynos5_usbdrd_usbdp_g2_v4_pma_check_pll_lock(phy_drd))
 		exynos5_usbdrd_usbdp_g2_v4_pma_check_cdr_lock(phy_drd);
+}
+
+static void exynos5_usbdrd_zuma_pipe3_init(struct exynos5_usbdrd_phy *phy_drd)
+{
+	/*
+	 * Keep probe-time PIPE3 init minimal on Zuma.
+	 *
+	 * The downstream SNPS USBDP/TCA sequence touches blocks that are still
+	 * not fully modeled in this mainline-style driver and can leave the DWC3
+	 * core unable to complete soft reset. UTMI/eUSB2 remains initialized via
+	 * the dedicated HS PHY path.
+	 */
+	zuma_usbcon_ready_to_pipe3_phy(phy_drd);
 }
 
 static int exynos5_usbdrd_gs101_phy_init(struct phy *phy)
@@ -1768,6 +1999,78 @@ static int exynos5_usbdrd_gs101_phy_exit(struct phy *phy)
 static const struct phy_ops gs101_usbdrd_phy_ops = {
 	.init		= exynos5_usbdrd_gs101_phy_init,
 	.exit		= exynos5_usbdrd_gs101_phy_exit,
+	.owner		= THIS_MODULE,
+};
+
+static int exynos5_usbdrd_zuma_phy_init(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	int ret;
+
+	/* Power-on PHY regulators before touching either UTMI or PIPE3 */
+	ret = regulator_bulk_enable(phy_drd->drv_data->n_regulators,
+				    phy_drd->regulators);
+	if (ret) {
+		dev_err(phy_drd->dev, "Failed to enable PHY regulator(s)\n");
+		return ret;
+	}
+	/*
+	 * ... and ungate power via PMU. Without this here, we get an SError
+	 * trying to access PMA registers
+	 */
+	exynos5_usbdrd_phy_isol(inst, false);
+
+	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
+	if (ret)
+		return ret;
+
+	/* Set up the link controller in eUSB mode */
+	zuma_usbcon_init_link(phy_drd);
+
+	/* UTMI or PIPE3 link preparation */
+	if (inst->phy_cfg->id == EXYNOS5_DRDPHY_PIPE3)
+		zuma_usbcon_ready_to_pipe3_phy(phy_drd);
+
+	/* UTMI or PIPE3 specific init */
+	inst->phy_cfg->phy_init(phy_drd);
+
+	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
+
+	return 0;
+}
+
+static int exynos5_usbdrd_zuma_phy_exit(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	void __iomem *regs_base = phy_drd->reg_link ?: phy_drd->reg_phy;
+	u32 reg;
+	int ret;
+
+	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
+	if (ret)
+		return ret;
+
+	reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+	reg &= ~(EXYNOS2200_UTMI_FORCE_BVALID | EXYNOS2200_UTMI_FORCE_VBUSVALID);
+	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_CLKRST);
+	reg |= CLKRST_LINK_SW_RST;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+
+	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
+
+	exynos5_usbdrd_phy_isol(inst, true);
+
+	return regulator_bulk_disable(phy_drd->drv_data->n_regulators,
+				      phy_drd->regulators);
+}
+
+static const struct phy_ops zuma_usbdrd_phy_ops = {
+	.init		= exynos5_usbdrd_zuma_phy_init,
+	.exit		= exynos5_usbdrd_zuma_phy_exit,
 	.owner		= THIS_MODULE,
 };
 
@@ -1842,6 +2145,8 @@ static int exynos5_usbdrd_orien_sw_set(struct typec_switch_dev *sw,
 				       enum typec_orientation orientation)
 {
 	struct exynos5_usbdrd_phy *phy_drd = typec_switch_get_drvdata(sw);
+	const bool is_zuma = of_device_is_compatible(phy_drd->dev->of_node,
+						      "google,zuma-usb32drd-phy");
 	int ret;
 
 	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
@@ -1851,29 +2156,42 @@ static int exynos5_usbdrd_orien_sw_set(struct typec_switch_dev *sw,
 	}
 
 	scoped_guard(mutex, &phy_drd->phy_mutex) {
-		void __iomem * const regs_base = phy_drd->reg_phy;
+		void __iomem * const regs_base = is_zuma ?
+			(phy_drd->reg_link ?: phy_drd->reg_phy) :
+			phy_drd->reg_phy;
 		unsigned int reg;
 
-		if (orientation == TYPEC_ORIENTATION_NONE) {
-			reg = readl(regs_base + EXYNOS850_DRD_UTMI);
-			reg &= ~(UTMI_FORCE_VBUSVALID | UTMI_FORCE_BVALID);
-			writel(reg, regs_base +  EXYNOS850_DRD_UTMI);
-
-			reg = readl(regs_base + EXYNOS850_DRD_HSP);
-			reg |= HSP_VBUSVLDEXTSEL;
-			reg &= ~HSP_VBUSVLDEXT;
-			writel(reg, regs_base + EXYNOS850_DRD_HSP);
+		if (is_zuma) {
+			reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+			reg |= EXYNOS2200_UTMI_FORCE_VBUSVALID |
+			       EXYNOS2200_UTMI_FORCE_BVALID;
+			writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
 		} else {
-			reg = readl(regs_base + EXYNOS850_DRD_UTMI);
-			reg |= UTMI_FORCE_VBUSVALID | UTMI_FORCE_BVALID;
-			writel(reg, regs_base +  EXYNOS850_DRD_UTMI);
+			if (orientation == TYPEC_ORIENTATION_NONE) {
+				reg = readl(regs_base + EXYNOS850_DRD_UTMI);
+				reg &= ~(UTMI_FORCE_VBUSVALID | UTMI_FORCE_BVALID);
+				writel(reg, regs_base + EXYNOS850_DRD_UTMI);
 
-			reg = readl(regs_base + EXYNOS850_DRD_HSP);
-			reg |= HSP_VBUSVLDEXTSEL | HSP_VBUSVLDEXT;
-			writel(reg, regs_base + EXYNOS850_DRD_HSP);
+				reg = readl(regs_base + EXYNOS850_DRD_HSP);
+				reg |= HSP_VBUSVLDEXTSEL;
+				reg &= ~HSP_VBUSVLDEXT;
+				writel(reg, regs_base + EXYNOS850_DRD_HSP);
+			} else {
+				reg = readl(regs_base + EXYNOS850_DRD_UTMI);
+				reg |= UTMI_FORCE_VBUSVALID | UTMI_FORCE_BVALID;
+				writel(reg, regs_base + EXYNOS850_DRD_UTMI);
+
+				reg = readl(regs_base + EXYNOS850_DRD_HSP);
+				reg |= HSP_VBUSVLDEXTSEL | HSP_VBUSVLDEXT;
+				writel(reg, regs_base + EXYNOS850_DRD_HSP);
+			}
 		}
 
 		phy_drd->orientation = orientation;
+
+		if (is_zuma)
+			dev_dbg(phy_drd->dev, "zuma orientation update: %u\n",
+				orientation);
 	}
 
 	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
@@ -2709,6 +3027,19 @@ static const struct exynos5_usbdrd_phy_config phy_cfg_gs101[] = {
 	},
 };
 
+static const struct exynos5_usbdrd_phy_config phy_cfg_zuma[] = {
+	{
+		.id		= EXYNOS5_DRDPHY_UTMI,
+		.phy_isol	= exynos5_usbdrd_phy_isol,
+		.phy_init	= zuma_usbdrd_utmi_init,
+	},
+	{
+		.id		= EXYNOS5_DRDPHY_PIPE3,
+		.phy_isol	= exynos5_usbdrd_phy_isol,
+		.phy_init	= exynos5_usbdrd_zuma_pipe3_init,
+	},
+};
+
 static const struct exynos5_usbdrd_phy_tuning gs101_tunes_utmi_postinit[] = {
 	PHY_TUNING_ENTRY_PHY(EXYNOS850_DRD_HSPPARACON,
 			     (HSPPARACON_TXVREF | HSPPARACON_TXRES |
@@ -2850,11 +3181,176 @@ static const struct exynos5_usbdrd_phy_tuning *gs101_tunes[PTS_MAX] = {
 	[PTS_PIPE3_POSTLOCK] = gs101_tunes_pipe3_postlock,
 };
 
+static const struct exynos5_usbdrd_phy_tuning zuma_tunes_utmi_postinit[] = {
+	PHY_TUNING_ENTRY_PHY(EXYNOS850_DRD_HSPPARACON,
+			     (HSPPARACON_TXVREF | HSPPARACON_TXRES |
+			      HSPPARACON_TXPREEMPAMP | HSPPARACON_SQRX |
+			      HSPPARACON_COMPDIS),
+			     (FIELD_PREP_CONST(HSPPARACON_TXVREF, 0) |
+			      FIELD_PREP_CONST(HSPPARACON_TXRES, 1) |
+			      FIELD_PREP_CONST(HSPPARACON_TXPREEMPAMP, 3) |
+			      FIELD_PREP_CONST(HSPPARACON_SQRX, 5) |
+			      FIELD_PREP_CONST(HSPPARACON_COMPDIS, 7))),
+	PHY_TUNING_ENTRY_LAST
+};
+
+static const struct exynos5_usbdrd_phy_tuning zuma_tunes_pipe3_preinit[] = {
+	/* CDR data mode exit GEN1 ON / GEN2 OFF */
+	PHY_TUNING_ENTRY_PMA(0x0c8c, -1, 0xff),
+	PHY_TUNING_ENTRY_PMA(0x1c8c, -1, 0xff),
+	PHY_TUNING_ENTRY_PMA(0x0c9c, -1, 0x7d),
+	PHY_TUNING_ENTRY_PMA(0x1c9c, -1, 0x7d),
+	/* improve EDS distribution */
+	PHY_TUNING_ENTRY_PMA(0x0e7c, -1, 0x06),
+	PHY_TUNING_ENTRY_PMA(0x09e0, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x09e4, -1, 0x35),
+	PHY_TUNING_ENTRY_PMA(0x1e7c, -1, 0x06),
+	PHY_TUNING_ENTRY_PMA(0x19e0, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x19e4, -1, 0x35),
+	/* improve LVCC */
+	PHY_TUNING_ENTRY_PMA(0x08f0, -1, 0x30),
+	PHY_TUNING_ENTRY_PMA(0x18f0, -1, 0x30),
+	/* LFPS RX VIH shmoo hole */
+	PHY_TUNING_ENTRY_PMA(0x0a08, -1, 0x0c),
+	PHY_TUNING_ENTRY_PMA(0x1a08, -1, 0x0c),
+	/* remove unrelated option for v4 phy */
+	PHY_TUNING_ENTRY_PMA(0x0a0c, -1, 0x05),
+	PHY_TUNING_ENTRY_PMA(0x1a0c, -1, 0x05),
+	/* improve Gen2 LVCC */
+	PHY_TUNING_ENTRY_PMA(0x00f8, -1, 0x1c),
+	PHY_TUNING_ENTRY_PMA(0x00fc, -1, 0x54),
+	/* Change Vth of RCV_DET (19.2MHz refclk path) */
+	PHY_TUNING_ENTRY_PMA(0x104c, -1, 0x05),
+	PHY_TUNING_ENTRY_PMA(0x204c, -1, 0x05),
+	/* reduce Ux Exit time */
+	PHY_TUNING_ENTRY_PMA(0x0ca8, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x0cac, -1, 0x04),
+	PHY_TUNING_ENTRY_PMA(0x1ca8, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x1cac, -1, 0x04),
+	PHY_TUNING_ENTRY_PMA(0x0cb8, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x0cbc, -1, 0x04),
+	PHY_TUNING_ENTRY_PMA(0x1cb8, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x1cbc, -1, 0x04),
+	/* CDR Lock Delay for JTOL link training */
+	PHY_TUNING_ENTRY_PMA(0x0320, -1, 0x03),
+	PHY_TUNING_ENTRY_PMA(0x0324, -1, 0x23),
+	/* common reset for 4lane tx */
+	PHY_TUNING_ENTRY_PMA(0x0858, -1, 0x63),
+	PHY_TUNING_ENTRY_PMA(0x1858, -1, 0x63),
+	PHY_TUNING_ENTRY_PMA(0x1058, -1, 0x63),
+	PHY_TUNING_ENTRY_PMA(0x2058, -1, 0x63),
+	/* rx rterm to 90 ohm */
+	PHY_TUNING_ENTRY_PMA(0x0bb4, -1, 0xa0),
+	PHY_TUNING_ENTRY_PMA(0x1bb4, -1, 0xa0),
+	/* additional downstream tuning */
+	PHY_TUNING_ENTRY_PMA(0x0dec, -1, 0x2b),
+	PHY_TUNING_ENTRY_PMA(0x1dec, -1, 0x2b),
+	PHY_TUNING_ENTRY_PMA(0x0934, -1, 0x7f),
+	PHY_TUNING_ENTRY_PMA(0x1934, -1, 0x7f),
+	PHY_TUNING_ENTRY_PMA(0x0948, -1, 0x32),
+	PHY_TUNING_ENTRY_PMA(0x1948, -1, 0x32),
+	PHY_TUNING_ENTRY_PMA(0x0df4, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x1df4, -1, 0x00),
+	PHY_TUNING_ENTRY_PMA(0x091c, -1, 0x1d),
+	PHY_TUNING_ENTRY_PMA(0x191c, -1, 0x1d),
+	PHY_TUNING_ENTRY_PMA(0x0928, -1, 0x0c),
+	PHY_TUNING_ENTRY_PMA(0x1928, -1, 0x0c),
+	PHY_TUNING_ENTRY_PMA(0x0e0c, -1, 0x3c),
+	PHY_TUNING_ENTRY_PMA(0x1e0c, -1, 0x3c),
+	PHY_TUNING_ENTRY_PMA(0x0ebc, -1, 0x04),
+	PHY_TUNING_ENTRY_PMA(0x1ebc, -1, 0x04),
+	PHY_TUNING_ENTRY_PMA(0x0908, -1, 0x10),
+	PHY_TUNING_ENTRY_PMA(0x1908, -1, 0x10),
+
+	PHY_TUNING_ENTRY_LAST
+};
+
+static const struct exynos5_usbdrd_phy_tuning zuma_tunes_pipe3_init[] = {
+	/* abnormal common pattern mask */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_BACK_END_MODE_VEC,
+			     BACK_END_MODE_VEC_DISABLE_DATA_MASK, 0),
+	/* de-serializer enabled when U2 */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_OUT_VEC_2, PCS_OUT_VEC_B4_DYNAMIC,
+			     PCS_OUT_VEC_B4_SEL_OUT),
+	/* TX Keeper Disable, Squelch on when U3 */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_OUT_VEC_3, PCS_OUT_VEC_B7_DYNAMIC,
+			     PCS_OUT_VEC_B7_SEL_OUT | PCS_OUT_VEC_B2_SEL_OUT),
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_NS_VEC_PS1_N1, -1,
+			     (FIELD_PREP_CONST(NS_VEC_NS_REQ, 5) |
+			      NS_VEC_ENABLE_TIMER |
+			      FIELD_PREP_CONST(NS_VEC_SEL_TIMEOUT, 3))),
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_NS_VEC_PS2_N0, -1,
+			     (FIELD_PREP_CONST(NS_VEC_NS_REQ, 1) |
+			      NS_VEC_ENABLE_TIMER |
+			      FIELD_PREP_CONST(NS_VEC_SEL_TIMEOUT, 3) |
+			      FIELD_PREP_CONST(NS_VEC_COND_MASK, 2) |
+			      FIELD_PREP_CONST(NS_VEC_EXP_COND, 2))),
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_NS_VEC_PS3_N0, -1,
+			     (FIELD_PREP_CONST(NS_VEC_NS_REQ, 1) |
+			      NS_VEC_ENABLE_TIMER |
+			      FIELD_PREP_CONST(NS_VEC_SEL_TIMEOUT, 3) |
+			      FIELD_PREP_CONST(NS_VEC_COND_MASK, 7) |
+			      FIELD_PREP_CONST(NS_VEC_EXP_COND, 7))),
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_TIMEOUT_0, -1, 112),
+	/* Block Aligner Type B */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_RX_CONTROL, 0,
+			     RX_CONTROL_EN_BLOCK_ALIGNER_TYPE_B),
+	/* Block align at TS1/TS2 for Gen2 stability (Gen2 only) */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_RX_CONTROL_DEBUG,
+			     RX_CONTROL_DEBUG_NUM_COM_FOUND,
+			     (RX_CONTROL_DEBUG_EN_TS_CHECK |
+			      FIELD_PREP_CONST(RX_CONTROL_DEBUG_NUM_COM_FOUND, 4))),
+	/* Gen1 Tx DRIVER pre-shoot, de-emphasis, level ctrl */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_HS_TX_COEF_MAP_0,
+			     (HS_TX_COEF_MAP_0_SSTX_DEEMP |
+			      HS_TX_COEF_MAP_0_SSTX_LEVEL |
+			      HS_TX_COEF_MAP_0_SSTX_PRE_SHOOT),
+			     (FIELD_PREP_CONST(HS_TX_COEF_MAP_0_SSTX_DEEMP, 8) |
+			      FIELD_PREP_CONST(HS_TX_COEF_MAP_0_SSTX_LEVEL, 0xb) |
+			      FIELD_PREP_CONST(HS_TX_COEF_MAP_0_SSTX_PRE_SHOOT, 0))),
+	/* Gen2 Tx DRIVER level ctrl */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_LOCAL_COEF,
+			     LOCAL_COEF_PMA_CENTER_COEF,
+			     FIELD_PREP_CONST(LOCAL_COEF_PMA_CENTER_COEF, 0xb)),
+	/* Gen2 U1 exit LFPS duration : 900ns ~ 1.2us */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_TIMEOUT_3, -1, 4096),
+	/* set skp_remove_th 0x2 -> 0x7 for avoiding retry problem. */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_EBUF_PARAM,
+			     EBUF_PARAM_SKP_REMOVE_TH_EMPTY_MODE,
+			     FIELD_PREP_CONST(EBUF_PARAM_SKP_REMOVE_TH_EMPTY_MODE, 0x7)),
+
+	PHY_TUNING_ENTRY_LAST
+};
+
+static const struct exynos5_usbdrd_phy_tuning zuma_tunes_pipe3_postlock[] = {
+	/* Squelch off when U3 */
+	PHY_TUNING_ENTRY_PCS(EXYNOS9_PCS_OUT_VEC_3, PCS_OUT_VEC_B2_SEL_OUT, 0),
+
+	PHY_TUNING_ENTRY_LAST
+};
+
+static const struct exynos5_usbdrd_phy_tuning *zuma_tunes[PTS_MAX] = {
+	[PTS_UTMI_POSTINIT] = zuma_tunes_utmi_postinit,
+	[PTS_PIPE3_PREINIT] = NULL,
+	[PTS_PIPE3_INIT] = NULL,
+	[PTS_PIPE3_POSTLOCK] = zuma_tunes_pipe3_postlock,
+};
+
 static const char * const gs101_clk_names[] = {
 	"phy", "ctrl_aclk", "ctrl_pclk", "scl_pclk",
 };
 
+static const char * const zuma_clk_names[] = {
+	"phy", "ctrl_aclk", "ctrl_pclk", "scl_pclk",
+};
+
 static const char * const gs101_regulator_names[] = {
+	"pll",
+	"dvdd-usb20", "vddh-usb20", "vdd33-usb20",
+	"vdda-usbdp", "vddh-usbdp",
+};
+
+static const char * const zuma_regulator_names[] = {
 	"pll",
 	"dvdd-usb20", "vddh-usb20", "vdd33-usb20",
 	"vdda-usbdp", "vddh-usbdp",
@@ -2874,8 +3370,25 @@ static const struct exynos5_usbdrd_phy_drvdata gs101_usbd31rd_phy = {
 	.n_regulators			= ARRAY_SIZE(gs101_regulator_names),
 };
 
+static const struct exynos5_usbdrd_phy_drvdata zuma_usbd31rd_phy = {
+	.phy_cfg			= phy_cfg_zuma,
+	.phy_tunes			= zuma_tunes,
+	.phy_ops			= &zuma_usbdrd_phy_ops,
+	.pmu_offset_usbdrd0_phy		= GS101_PHY_CTRL_USB20,
+	.pmu_offset_usbdrd0_phy_ss	= GS101_PHY_CTRL_USBDP,
+	.clk_names			= zuma_clk_names,
+	.n_clks				= ARRAY_SIZE(zuma_clk_names),
+	.core_clk_names			= exynos5_core_clk_names,
+	.n_core_clks			= ARRAY_SIZE(exynos5_core_clk_names),
+	.regulator_names		= zuma_regulator_names,
+	.n_regulators			= ARRAY_SIZE(zuma_regulator_names),
+};
+
 static const struct of_device_id exynos5_usbdrd_phy_of_match[] = {
 	{
+		.compatible = "google,zuma-usb32drd-phy",
+		.data = &zuma_usbd31rd_phy
+	}, {
 		.compatible = "google,gs101-usb31drd-phy",
 		.data = &gs101_usbd31rd_phy
 	}, {
@@ -2947,20 +3460,63 @@ static int exynos5_usbdrd_phy_probe(struct platform_device *pdev)
 	if (of_property_present(dev->of_node, "reg-names")) {
 		void __iomem *reg;
 
-		reg = devm_platform_ioremap_resource_byname(pdev, "phy");
-		if (IS_ERR(reg))
-			return PTR_ERR(reg);
-		phy_drd->reg_phy = reg;
+		if (of_device_is_compatible(dev->of_node,
+					    "google,zuma-usb32drd-phy")) {
+			/*
+			 * Zuma uses a multi-region layout matching downstream:
+			 * 0: blkcon, 1: eusb_ctrl, 2: eusb_phy,
+			 * 3: usbdp pcs, 4: usbdp pma/tca, 5: link.
+			 * Keep existing in-driver register usage by mapping:
+			 * reg_phy -> blkcon, reg_pcs -> pcs, reg_pma -> pma.
+			 */
+			reg = devm_platform_ioremap_resource(pdev, 0);
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_phy = reg;
 
-		reg = devm_platform_ioremap_resource_byname(pdev, "pcs");
-		if (IS_ERR(reg))
-			return PTR_ERR(reg);
-		phy_drd->reg_pcs = reg;
+			/*
+			 * Link SFR space overlaps the DWC3 resource region.
+			 * Map it non-exclusively for PHY-side UTMI/link control.
+			 */
+			{
+				struct resource *res;
 
-		reg = devm_platform_ioremap_resource_byname(pdev, "pma");
-		if (IS_ERR(reg))
-			return PTR_ERR(reg);
-		phy_drd->reg_pma = reg;
+				res = platform_get_resource(pdev, IORESOURCE_MEM, 5);
+				if (!res)
+					return -EINVAL;
+
+				reg = devm_ioremap(dev, res->start,
+						   resource_size(res));
+				if (!reg)
+					return -ENOMEM;
+				phy_drd->reg_link = reg;
+			}
+
+			reg = devm_platform_ioremap_resource(pdev, 3);
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_pcs = reg;
+
+			reg = devm_platform_ioremap_resource(pdev, 4);
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_pma = reg;
+		} else {
+			reg = devm_platform_ioremap_resource_byname(pdev, "phy");
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_phy = reg;
+
+			reg = devm_platform_ioremap_resource_byname(pdev, "pcs");
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_pcs = reg;
+
+			reg = devm_platform_ioremap_resource_byname(pdev, "pma");
+			if (IS_ERR(reg))
+				return PTR_ERR(reg);
+			phy_drd->reg_pma = reg;
+		}
 	} else {
 		/* DTB with just a single region */
 		phy_drd->reg_phy = devm_platform_ioremap_resource(pdev, 0);
