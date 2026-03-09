@@ -37,24 +37,3 @@
 	st,udfps-coords = <540 1769>;
 	st,touch_offload_id = /bits/ 8 <'0' '0' 'o' '6'>;
 };
-
-&drmdsim1 {
-	status = "okay";
-
-	google_gs_km4: panel@0 {
-		compatible = "google,gs-km4";
-		label = "google-km4";
-		reg = <0>;
-		channel = <0>;
-		touch = <&spitouch>;
-
-		reset-gpios = <&gpp0 0 GPIO_ACTIVE_HIGH>;
-		vddio-supply = <&reg_placeholder>;
-		vci-supply = <&reg_placeholder>;
-		poc-supply = <&reg_placeholder>;
-	};
-};
-
-&decon0 {
-	status = "okay";
-};
