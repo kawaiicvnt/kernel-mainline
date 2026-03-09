@@ -3856,7 +3856,6 @@
 				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
 			clock-names = "pclk_decon0", "aclk_decon0",
 				      "decon0_eclk", "decon0_vclk";
-			iommus = <&sysmmu_dpuf0>, <&sysmmu_dpuf1>;
 
 			status = "disabled";
 		};
