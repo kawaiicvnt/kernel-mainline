@@ -42,6 +42,7 @@ struct decon_data {
 	unsigned int vidw_buf_start_base;
 	unsigned int shadowcon_win_protect_shift;
 	unsigned int wincon_burstlen_shift;
+	bool use_frame_start_irq;
 };
 
 static const struct decon_data exynos7_decon_data = {
@@ -54,6 +55,13 @@ static const struct decon_data exynos7870_decon_data = {
 	.vidw_buf_start_base = 0x880,
 	.shadowcon_win_protect_shift = 8,
 	.wincon_burstlen_shift = 10,
+};
+
+static const struct decon_data zuma_decon_data = {
+	.vidw_buf_start_base = 0x880,
+	.shadowcon_win_protect_shift = 8,
+	.wincon_burstlen_shift = 10,
+	.use_frame_start_irq = true,
 };
 
 struct decon_context {
@@ -77,6 +85,19 @@ struct decon_context {
 	struct drm_encoder *encoder;
 };
 
+static int decon_get_irq(struct platform_device *pdev, struct decon_context *ctx)
+{
+	int ret;
+
+	if (ctx->data->use_frame_start_irq && !ctx->i80_if) {
+		ret = platform_get_irq_byname_optional(pdev, "frame_start");
+		if (ret >= 0)
+			return ret;
+	}
+
+	return platform_get_irq_byname(pdev, ctx->i80_if ? "lcd_sys" : "vsync");
+}
+
 static const struct of_device_id decon_driver_dt_match[] = {
 	{
 		.compatible = "samsung,exynos7-decon",
@@ -85,6 +106,10 @@ static const struct of_device_id decon_driver_dt_match[] = {
 	{
 		.compatible = "samsung,exynos7870-decon",
 		.data = &exynos7870_decon_data,
+	},
+	{
+		.compatible = "google,zuma-decon",
+		.data = &zuma_decon_data,
 	},
 	{},
 };
@@ -619,6 +644,26 @@ out:
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t decon_frame_start_irq_handler(int irq, void *dev_id)
+{
+	struct decon_context *ctx = dev_id;
+
+	if (!ctx->drm_dev)
+		return IRQ_HANDLED;
+
+	if (!drm_dev_has_vblank(ctx->drm_dev))
+		return IRQ_HANDLED;
+
+	drm_crtc_handle_vblank(&ctx->crtc->base);
+
+	if (atomic_read(&ctx->wait_vsync_event)) {
+		atomic_set(&ctx->wait_vsync_event, 0);
+		wake_up(&ctx->wait_vsync_queue);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int decon_bind(struct device *dev, struct device *master, void *data)
 {
 	struct decon_context *ctx = dev_get_drvdata(dev);
@@ -732,11 +777,14 @@ static int decon_probe(struct platform_device *pdev)
 		goto err_iounmap;
 	}
 
-	ret =  platform_get_irq_byname(pdev, ctx->i80_if ? "lcd_sys" : "vsync");
+	ret = decon_get_irq(pdev, ctx);
 	if (ret < 0)
 		goto err_iounmap;
 
-	ret = devm_request_irq(dev, ret, decon_irq_handler, 0, "drm_decon", ctx);
+	ret = devm_request_irq(dev, ret,
+			       ctx->data->use_frame_start_irq && !ctx->i80_if ?
+			       decon_frame_start_irq_handler : decon_irq_handler,
+			       0, "drm_decon", ctx);
 	if (ret) {
 		dev_err(dev, "irq request failed.\n");
 		goto err_iounmap;

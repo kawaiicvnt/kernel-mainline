@@ -3597,6 +3597,13 @@
 				samsung,cam0-sysreg = <&sysreg_cam0>;
 			};
 
+			mipi_phy_dsim0_m4m4: mipi-phy-dsim {
+				compatible = "samsung,mipi-phy-m4m4";
+				isolation = <0x3eb8>;
+				owner = <0>;
+				#phy-cells = <1>;
+			};
+
 			poweroff: syscon-poweroff {
 				compatible = "syscon-poweroff";
 				offset = <0x3e9c>; /* PAD_CTRL_PWR_HOLD */
@@ -3722,44 +3729,48 @@
 			status = "disabled";
 		};
 
-		cmu_dpu: clock-controller@1c000000 {
-			compatible = "google,gs101-cmu-dpu";
-			reg = <0x1c000000 0x10000>;
+		cmu_dpu: clock-controller@19400000 {
+			compatible = "google,zuma-cmu-dpu";
+			reg = <0x19400000 0x10000>;
 			#clock-cells = <1>;
 
-			clocks = <&ext_24_5m>,
-				 <&cmu_top CLK_DOUT_CMU_DPU_BUS>;
-			clock-names = "oscclk", "bus";
+			clocks = <&ext_26m>,
+				 <&cmu_top CLK_DOUT_CMU_DPU_BUS>,
+				 <&cmu_top CLK_DOUT_CMU_SHARED0_DIV4>;
+			clock-names = "oscclk", "bus", "dsim";
 			samsung,sysreg = <&sysreg_dpu>;
 		};
 
-		sysreg_cam0: sysreg_dpu: syscon@1c020000 {
+		sysreg_cam0: sysreg_dpu: syscon@19420000 {
 			compatible = "google,gs101-dpu-sysreg", "syscon";
-			reg = <0x1c020000 0x10000>;
+			reg = <0x19420000 0x10000>;
 			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
 		};
 
 		drmdsim0: dsi@19440000 {
 			compatible = "samsung,zuma-mipi-dsi";
-			reg = <0x19440000 0x300>;
+			reg = <0x19440000 0x300>,
+			      <0x19460100 0x700>,
+			      <0x19460000 0x100>;
+			reg-names = "dsi", "dphy", "dphy-extra";
 			interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>;
 
-			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clocks = <&cmu_dpu CLK_GOUT_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM0_OSCCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM0_ALVCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM0_OSCCLK>;
 			clock-names = "bus", "pll", "byte", "esc";
 
 			vddcore-supply = <&reg_placeholder>;
 			vddio-supply = <&reg_placeholder>;
 
 			samsung,esc-clock-frequency = <20000000>;
-			samsung,pll-clock-frequency = <24000000>;
-			samsung,burst-clock-frequency = <1368000000>;
+			samsung,pll-clock-frequency = <26000000>;
+			samsung,burst-clock-frequency = <756000000>;
 			dsim,id = <0>;
 			te_from = <0>;
 			te-gpio = <&gpp0 3 0xf>;
-			phys = <&mipi_phy 1>;
+			phys = <&mipi_phy_dsim0_m4m4 0>;
 			phy-names = "dsim";
 
 			pinctrl-names = "hw_te_on", "hw_te_off";
@@ -3784,25 +3795,28 @@
 
 		drmdsim1: dsi@19450000 {
 			compatible = "samsung,zuma-mipi-dsi";
-			reg = <0x19450000 0x300>;
+			reg = <0x19450000 0x300>,
+			      <0x19460900 0x700>,
+			      <0x19460000 0x100>;
+			reg-names = "dsi", "dphy", "dphy-extra";
 			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>;
 
-			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clocks = <&cmu_dpu CLK_GOUT_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM1_OSCCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM1_ALVCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DSIM1_OSCCLK>;
 			clock-names = "bus", "pll", "byte", "esc";
 
 			vddcore-supply = <&reg_placeholder>;
 			vddio-supply = <&reg_placeholder>;
 
 			samsung,esc-clock-frequency = <20000000>;
-			samsung,pll-clock-frequency = <24000000>;
-			samsung,burst-clock-frequency = <1368000000>;
+			samsung,pll-clock-frequency = <26000000>;
+			samsung,burst-clock-frequency = <756000000>;
 			dsim,id = <1>;
 			te_from = <1>;
 			te-gpio = <&gpp0 4 0xf>;
-			phys = <&mipi_phy 1>;
+			phys = <&mipi_phy_dsim0_m4m4 0>;
 			phy-names = "dsim";
 
 			pinctrl-names = "hw_te_on", "hw_te_off";
@@ -3826,17 +3840,17 @@
 		};
 
 		drmdecon0: decon0: display-controller@19470000 {
-			compatible = "samsung,exynos7870-decon";
+			compatible = "google,zuma-decon", "samsung,exynos7870-decon";
 			reg = <0x19470000 0x8000>;
-			interrupts = <GIC_SPI 243 IRQ_TYPE_LEVEL_HIGH 0>,
-				     <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH 0>,
-				     <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH 0>;
-			interrupt-names = "fifo", "vsync", "lcd_sys";
+			interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 240 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 239 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "frame_start", "frame_done", "extra";
 
-			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
-				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clocks = <&cmu_dpu CLK_GOUT_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DECON0_ACLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DECON0_ECLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_DECON0_VCLK>;
 			clock-names = "pclk_decon0", "aclk_decon0",
 				      "decon0_eclk", "decon0_vclk";
 

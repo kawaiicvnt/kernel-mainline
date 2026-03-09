@@ -33,6 +33,8 @@
 
 &drmdsim0 {
 	status = "okay";
+	samsung,burst-clock-frequency = <1368000000>;
+	samsung,pll-pmsk = <0x1 0x6f 0x2 0x5400>;
 };
 
 &drmdecon0 {

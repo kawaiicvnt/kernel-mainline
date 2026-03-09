@@ -219,6 +219,204 @@
 #define DSI_XFER_TIMEOUT_MS		100
 #define DSI_RX_FIFO_EMPTY		0x30800002
 
+/* Zuma DPHY register block */
+#define ZUMA_DSIM_PHY_BIAS_CON(_id)		(0x0000 + (4 * (_id)))
+#define ZUMA_DSIM_PHY_PLL_CON(_id)		(0x0000 + (4 * (_id)))
+#define ZUMA_DSIM_PHY_PLL_CON0			0x0000
+#define ZUMA_DSIM_PHY_PLL_CON1			0x0004
+#define ZUMA_DSIM_PHY_PLL_CON2			0x0008
+#define ZUMA_DSIM_PHY_PLL_CON5			0x0014
+#define ZUMA_DSIM_PHY_PLL_CON6			0x0018
+#define ZUMA_DSIM_PHY_PLL_CON7			0x001c
+#define ZUMA_DSIM_PHY_PLL_STAT0			0x0040
+#define ZUMA_DSIM_PHY_MC_GNR_CON(_id)		(0x0200 + (4 * (_id)))
+#define ZUMA_DSIM_PHY_MC_ANA_CON(_id)		(0x0208 + (4 * (_id)))
+#define ZUMA_DSIM_PHY_MD_GNR_CON0(_x)		(0x0300 + (0x100 * (_x)))
+#define ZUMA_DSIM_PHY_MD_ANA_CON0(_x)		(0x0308 + (0x100 * (_x)))
+#define ZUMA_DSIM_PHY_PLL_EN			BIT(12)
+#define ZUMA_DSIM_PHY_PMS_S(_x)		(((_x) & 0x7) << 8)
+#define ZUMA_DSIM_PHY_PMS_P(_x)		(((_x) & 0x3f) << 0)
+#define ZUMA_DSIM_PHY_PMS_K(_x)		(((_x) & 0xffff) << 0)
+#define ZUMA_DSIM_PHY_PMS_M(_x)		(((_x) & 0x3ff) << 0)
+#define ZUMA_DSIM_PHY_WCLK_BUF_SFT_CNT(_x)	(((_x) & 0xf) << 8)
+#define ZUMA_DSIM_PHY_PLL_LOCK_CNT(_x)		(((_x) & 0xffff) << 0)
+
+static const u32 zuma_dsim_phy_bias_con_val[] = {
+	0x00000010,
+	0x00000110,
+	0x00003223,
+	0x00000000,
+	0x00000200,
+	0x00000002,
+};
+
+static const u32 zuma_dsim_phy_pll_con_val[] = {
+	0x00000000,
+	0x00000000,
+	0x00000000,
+	0x00000000,
+	0x00000000,
+	0x00000500,
+	0x0000008e,
+	0x00003d40,
+	0x00001e00,
+	0x00001300,
+};
+
+static const u32 zuma_dsim_phy_mc_gnr_con_val[] = {
+	0x00000000,
+	0x00001334,
+};
+
+static const u32 zuma_dsim_phy_mc_ana_con_val[] = {
+	0x00007122,
+	0x00000000,
+	0x00000002,
+	0x00000000,
+};
+
+static const u32 zuma_dsim_phy_md_gnr_con_val[] = {
+	0x00000000,
+	0x00001334,
+};
+
+static const u32 zuma_dsim_phy_md_ana_con_val[] = {
+	0x00007122,
+	0x00000000,
+	0x00000000,
+	0x00000000,
+};
+
+static unsigned long samsung_dsim_pll_find_pms(struct samsung_dsim *dsi,
+					       unsigned long fin,
+					       unsigned long fout,
+					       u8 *p, u16 *m, u8 *s);
+
+static bool samsung_dsim_has_external_dphy(struct samsung_dsim *dsi)
+{
+	return dsi->dphy_reg_base && dsi->dphy_extra_reg_base;
+}
+
+static int samsung_dsim_ioremap_optional_dphy(struct samsung_dsim *dsi,
+					      struct platform_device *pdev)
+{
+	dsi->dphy_reg_base = devm_platform_ioremap_resource_byname(pdev, "dphy");
+	if (IS_ERR(dsi->dphy_reg_base)) {
+		if (PTR_ERR(dsi->dphy_reg_base) == -EINVAL ||
+		    PTR_ERR(dsi->dphy_reg_base) == -ENOENT)
+			dsi->dphy_reg_base = NULL;
+		else
+			return PTR_ERR(dsi->dphy_reg_base);
+	}
+
+	dsi->dphy_extra_reg_base =
+		devm_platform_ioremap_resource_byname(pdev, "dphy-extra");
+	if (IS_ERR(dsi->dphy_extra_reg_base)) {
+		if (PTR_ERR(dsi->dphy_extra_reg_base) == -EINVAL ||
+		    PTR_ERR(dsi->dphy_extra_reg_base) == -ENOENT)
+			dsi->dphy_extra_reg_base = NULL;
+		else
+			return PTR_ERR(dsi->dphy_extra_reg_base);
+	}
+
+	return 0;
+}
+
+static unsigned long samsung_dsim_zuma_set_pll(struct samsung_dsim *dsi,
+					       unsigned long freq)
+{
+	u32 reg;
+	int i;
+
+	if (!samsung_dsim_has_external_dphy(dsi))
+		return 0;
+
+	if (!dsi->has_pll_pmsk) {
+		dev_err(dsi->dev, "missing samsung,pll-pmsk for external DPHY\n");
+		return 0;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(zuma_dsim_phy_bias_con_val); i++)
+		writel(zuma_dsim_phy_bias_con_val[i],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_BIAS_CON(i));
+
+	writel(zuma_dsim_phy_pll_con_val[5],
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON5);
+	writel(zuma_dsim_phy_pll_con_val[6],
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON6);
+	writel(zuma_dsim_phy_pll_con_val[7],
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON7);
+	writel(zuma_dsim_phy_pll_con_val[8], dsi->dphy_extra_reg_base);
+	writel(zuma_dsim_phy_pll_con_val[9], dsi->dphy_extra_reg_base + 0x4);
+
+	for (i = 0; i < ARRAY_SIZE(zuma_dsim_phy_mc_gnr_con_val); i++)
+		writel(zuma_dsim_phy_mc_gnr_con_val[i],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MC_GNR_CON(i));
+
+	for (i = 0; i < ARRAY_SIZE(zuma_dsim_phy_mc_ana_con_val); i++)
+		writel(zuma_dsim_phy_mc_ana_con_val[i],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MC_ANA_CON(i));
+
+	for (i = 0; i < dsi->lanes; i++) {
+		writel(zuma_dsim_phy_md_gnr_con_val[0],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_GNR_CON0(i));
+		writel(zuma_dsim_phy_md_gnr_con_val[1],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_GNR_CON0(i) + 0x4);
+
+		writel(zuma_dsim_phy_md_ana_con_val[0],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_ANA_CON0(i));
+		writel(zuma_dsim_phy_md_ana_con_val[1],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_ANA_CON0(i) + 0x4);
+		writel(zuma_dsim_phy_md_ana_con_val[2],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_ANA_CON0(i) + 0x8);
+		writel(zuma_dsim_phy_md_ana_con_val[3],
+		       dsi->dphy_reg_base + ZUMA_DSIM_PHY_MD_ANA_CON0(i) + 0xc);
+	}
+
+	reg = ZUMA_DSIM_PHY_PMS_P(dsi->pll_pmsk[0]) |
+	      ZUMA_DSIM_PHY_PMS_S(dsi->pll_pmsk[2]);
+	writel(reg, dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON0);
+	writel(ZUMA_DSIM_PHY_PMS_M(dsi->pll_pmsk[1]),
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON1);
+	writel(ZUMA_DSIM_PHY_PMS_K(dsi->pll_pmsk[3]),
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON2);
+	writel(ZUMA_DSIM_PHY_WCLK_BUF_SFT_CNT(3) |
+	       ZUMA_DSIM_PHY_PLL_LOCK_CNT(500),
+	       dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON7);
+
+	reg = readl(dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON0);
+	reg |= ZUMA_DSIM_PHY_PLL_EN;
+	writel(reg, dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON0);
+
+	return freq;
+}
+
+static void samsung_dsim_zuma_disable_pll(struct samsung_dsim *dsi)
+{
+	u32 reg;
+
+	if (!samsung_dsim_has_external_dphy(dsi))
+		return;
+
+	reg = readl(dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON0);
+	reg &= ~ZUMA_DSIM_PHY_PLL_EN;
+	writel(reg, dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_CON0);
+}
+
+static bool samsung_dsim_zuma_skip_phy_timing(struct samsung_dsim *dsi)
+{
+	return samsung_dsim_has_external_dphy(dsi);
+}
+
+static bool samsung_dsim_zuma_pll_locked(struct samsung_dsim *dsi)
+{
+	u32 reg;
+
+	reg = readl(dsi->dphy_reg_base + ZUMA_DSIM_PHY_PLL_STAT0);
+
+	return reg & BIT(0);
+}
+
 #define PS_TO_CYCLE(ps, hz) DIV64_U64_ROUND_CLOSEST(((ps) * (hz)), 1000000000000ULL)
 
 enum samsung_dsim_transfer_type {
@@ -733,6 +931,10 @@ static const struct samsung_dsim_driver_data zuma_dsi_driver_data = {
 	.m_min = 41,
 	.m_max = 125,
 	.min_freq = 500,
+	.set_pll = samsung_dsim_zuma_set_pll,
+	.disable_pll = samsung_dsim_zuma_disable_pll,
+	.skip_phy_timing = samsung_dsim_zuma_skip_phy_timing,
+	.pll_locked = samsung_dsim_zuma_pll_locked,
 };
 
 static const struct samsung_dsim_driver_data *
@@ -851,63 +1053,69 @@ static unsigned long samsung_dsim_set_pll(struct samsung_dsim *dsi,
 	u16 m;
 	u32 reg;
 
-	if (dsi->pll_clk) {
-		/*
-		 * Ensure that the reference clock is generated with a power of
-		 * two divider from its parent, but close to the PLLs upper
-		 * limit.
-		 */
-		fin = clk_get_rate(clk_get_parent(dsi->pll_clk));
-		while (fin > driver_data->pll_fin_max * HZ_PER_MHZ)
-			fin /= 2;
-		clk_set_rate(dsi->pll_clk, fin);
-
-		fin = clk_get_rate(dsi->pll_clk);
+	if (driver_data->set_pll) {
+		fout = driver_data->set_pll(dsi, freq);
+		if (!fout)
+			return 0;
 	} else {
-		fin = dsi->pll_clk_rate;
+		if (dsi->pll_clk) {
+			/*
+			 * Ensure that the reference clock is generated with a power of
+			 * two divider from its parent, but close to the PLLs upper
+			 * limit.
+			 */
+			fin = clk_get_rate(clk_get_parent(dsi->pll_clk));
+			while (fin > driver_data->pll_fin_max * HZ_PER_MHZ)
+				fin /= 2;
+			clk_set_rate(dsi->pll_clk, fin);
+
+			fin = clk_get_rate(dsi->pll_clk);
+		} else {
+			fin = dsi->pll_clk_rate;
+		}
+		dev_dbg(dsi->dev, "PLL ref clock freq %lu\n", fin);
+
+		fout = samsung_dsim_pll_find_pms(dsi, fin, freq, &p, &m, &s);
+		if (!fout) {
+			dev_err(dsi->dev,
+				"failed to find PLL PMS for requested frequency\n");
+			return 0;
+		}
+		dev_dbg(dsi->dev, "PLL freq %lu, (p %d, m %d, s %d)\n", fout, p, m, s);
+
+		writel(driver_data->reg_values[PLL_TIMER],
+		       dsi->reg_base + driver_data->plltmr_reg);
+
+		reg = DSIM_PLL_EN | DSIM_PLL(p, driver_data->pll_p_offset)
+				  | DSIM_PLL(m, driver_data->pll_m_offset)
+				  | DSIM_PLL(s, driver_data->pll_s_offset);
+
+		if (driver_data->has_freqband) {
+			static const unsigned long freq_bands[] = {
+				100 * HZ_PER_MHZ, 120 * HZ_PER_MHZ, 160 * HZ_PER_MHZ,
+				200 * HZ_PER_MHZ, 270 * HZ_PER_MHZ, 320 * HZ_PER_MHZ,
+				390 * HZ_PER_MHZ, 450 * HZ_PER_MHZ, 510 * HZ_PER_MHZ,
+				560 * HZ_PER_MHZ, 640 * HZ_PER_MHZ, 690 * HZ_PER_MHZ,
+				770 * HZ_PER_MHZ, 870 * HZ_PER_MHZ, 950 * HZ_PER_MHZ,
+			};
+			int band;
+
+			for (band = 0; band < ARRAY_SIZE(freq_bands); ++band)
+				if (fout < freq_bands[band])
+					break;
+
+			dev_dbg(dsi->dev, "band %d\n", band);
+
+			reg |= DSIM_FREQ_BAND(band);
+		}
+
+		if (dsi->swap_dn_dp_clk)
+			reg |= DSIM_PLL_DPDNSWAP_CLK;
+		if (dsi->swap_dn_dp_data)
+			reg |= DSIM_PLL_DPDNSWAP_DAT;
+
+		samsung_dsim_write(dsi, DSIM_PLLCTRL_REG, reg);
 	}
-	dev_dbg(dsi->dev, "PLL ref clock freq %lu\n", fin);
-
-	fout = samsung_dsim_pll_find_pms(dsi, fin, freq, &p, &m, &s);
-	if (!fout) {
-		dev_err(dsi->dev,
-			"failed to find PLL PMS for requested frequency\n");
-		return 0;
-	}
-	dev_dbg(dsi->dev, "PLL freq %lu, (p %d, m %d, s %d)\n", fout, p, m, s);
-
-	writel(driver_data->reg_values[PLL_TIMER],
-	       dsi->reg_base + driver_data->plltmr_reg);
-
-	reg = DSIM_PLL_EN | DSIM_PLL(p, driver_data->pll_p_offset)
-			  | DSIM_PLL(m, driver_data->pll_m_offset)
-			  | DSIM_PLL(s, driver_data->pll_s_offset);
-
-	if (driver_data->has_freqband) {
-		static const unsigned long freq_bands[] = {
-			100 * HZ_PER_MHZ, 120 * HZ_PER_MHZ, 160 * HZ_PER_MHZ,
-			200 * HZ_PER_MHZ, 270 * HZ_PER_MHZ, 320 * HZ_PER_MHZ,
-			390 * HZ_PER_MHZ, 450 * HZ_PER_MHZ, 510 * HZ_PER_MHZ,
-			560 * HZ_PER_MHZ, 640 * HZ_PER_MHZ, 690 * HZ_PER_MHZ,
-			770 * HZ_PER_MHZ, 870 * HZ_PER_MHZ, 950 * HZ_PER_MHZ,
-		};
-		int band;
-
-		for (band = 0; band < ARRAY_SIZE(freq_bands); ++band)
-			if (fout < freq_bands[band])
-				break;
-
-		dev_dbg(dsi->dev, "band %d\n", band);
-
-		reg |= DSIM_FREQ_BAND(band);
-	}
-
-	if (dsi->swap_dn_dp_clk)
-		reg |= DSIM_PLL_DPDNSWAP_CLK;
-	if (dsi->swap_dn_dp_data)
-		reg |= DSIM_PLL_DPDNSWAP_DAT;
-
-	samsung_dsim_write(dsi, DSIM_PLLCTRL_REG, reg);
 
 	timeout = 3000;
 	do {
@@ -915,11 +1123,19 @@ static unsigned long samsung_dsim_set_pll(struct samsung_dsim *dsi,
 			dev_err(dsi->dev, "PLL failed to stabilize\n");
 			return 0;
 		}
-		if (driver_data->has_legacy_status_reg)
-			reg = samsung_dsim_read(dsi, DSIM_STATUS_REG);
-		else
-			reg = samsung_dsim_read(dsi, DSIM_LINK_STATUS_REG);
-	} while ((reg & BIT(driver_data->pll_stable_bit)) == 0);
+		if (driver_data->pll_locked) {
+			if (driver_data->pll_locked(dsi))
+				break;
+		} else {
+			if (driver_data->has_legacy_status_reg)
+				reg = samsung_dsim_read(dsi, DSIM_STATUS_REG);
+			else
+				reg = samsung_dsim_read(dsi, DSIM_LINK_STATUS_REG);
+
+			if (reg & BIT(driver_data->pll_stable_bit))
+				break;
+		}
+	} while (1);
 
 	dsi->hs_clock = fout;
 
@@ -987,6 +1203,9 @@ static void samsung_dsim_set_phy_ctrl(struct samsung_dsim *dsi)
 	int clk_prepare, lpx, clk_zero, clk_post, clk_trail;
 	int hs_exit, hs_prepare, hs_zero, hs_trail;
 	unsigned long long byte_clock = dsi->hs_clock / 8;
+
+	if (driver_data->skip_phy_timing && driver_data->skip_phy_timing(dsi))
+		return;
 
 	if (driver_data->has_freqband)
 		return;
@@ -1078,6 +1297,9 @@ static void samsung_dsim_disable_clock(struct samsung_dsim *dsi)
 {
 	const struct samsung_dsim_driver_data *driver_data = dsi->driver_data;
 	u32 reg;
+
+	if (driver_data->disable_pll)
+		driver_data->disable_pll(dsi);
 
 	reg = samsung_dsim_read(dsi, DSIM_CLKCTRL_REG);
 	reg &= ~(BIT(driver_data->lane_esc_clk_bit)
@@ -2149,6 +2371,10 @@ static int samsung_dsim_parse_dt(struct samsung_dsim *dsi)
 	if (ret < 0)
 		return ret;
 
+	if (!of_property_read_u32_array(node, "samsung,pll-pmsk",
+					dsi->pll_pmsk, ARRAY_SIZE(dsi->pll_pmsk)))
+		dsi->has_pll_pmsk = true;
+
 	endpoint = of_graph_get_endpoint_by_regs(node, 1, -1);
 	nr_lanes = of_property_count_u32_elems(endpoint, "data-lanes");
 	if (nr_lanes > 0 && nr_lanes <= 4) {
@@ -2229,6 +2455,10 @@ int samsung_dsim_probe(struct platform_device *pdev)
 	dsi->reg_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dsi->reg_base))
 		return PTR_ERR(dsi->reg_base);
+
+	ret = samsung_dsim_ioremap_optional_dphy(dsi, pdev);
+	if (ret)
+		return ret;
 
 	dsi->phy = devm_phy_optional_get(dev, "dsim");
 	if (IS_ERR(dsi->phy)) {

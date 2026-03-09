@@ -17,6 +17,11 @@
 
 struct platform_device;
 struct samsung_dsim;
+typedef unsigned long (*samsung_dsim_set_pll_t)(struct samsung_dsim *dsi,
+						unsigned long freq);
+typedef void (*samsung_dsim_void_op_t)(struct samsung_dsim *dsi);
+typedef bool (*samsung_dsim_bool_op_t)(struct samsung_dsim *dsi);
+typedef bool (*samsung_dsim_pll_locked_t)(struct samsung_dsim *dsi);
 
 #define DSIM_STATE_ENABLED		BIT(0)
 #define DSIM_STATE_INITIALIZED		BIT(1)
@@ -83,6 +88,10 @@ struct samsung_dsim_driver_data {
 	unsigned int pll_fin_max;
 	u16 m_min;
 	u16 m_max;
+	samsung_dsim_set_pll_t set_pll;
+	samsung_dsim_void_op_t disable_pll;
+	samsung_dsim_bool_op_t skip_phy_timing;
+	samsung_dsim_pll_locked_t pll_locked;
 };
 
 struct samsung_dsim_host_ops {
@@ -105,6 +114,8 @@ struct samsung_dsim {
 	struct drm_display_mode mode;
 
 	void __iomem *reg_base;
+	void __iomem *dphy_reg_base;
+	void __iomem *dphy_extra_reg_base;
 	struct phy *phy;
 	struct clk *pll_clk;
 	struct regulator_bulk_data supplies[2];
@@ -115,12 +126,14 @@ struct samsung_dsim {
 	u32 burst_clk_rate;
 	u32 hs_clock;
 	u32 esc_clk_rate;
+	u32 pll_pmsk[4];
 	u32 lanes;
 	u32 mode_flags;
 	u32 format;
 
 	bool swap_dn_dp_clk;
 	bool swap_dn_dp_data;
+	bool has_pll_pmsk;
 	int state;
 	struct drm_property *brightness;
 	struct completion completed;
