@@ -353,6 +353,32 @@ static const unsigned int exynos7870_reg_ofs[] = {
 	[DSIM_PHYTIMING2_REG] = 0xBC,
 };
 
+static const unsigned int zuma_reg_ofs[] = {
+	[DSIM_LINK_STATUS_REG] = 0x08,
+	[DSIM_DPHY_STATUS_REG] = 0x1C,
+	[DSIM_SWRST_REG] = 0x04,
+	[DSIM_CLKCTRL_REG] = 0x20,
+	[DSIM_TIMEOUT_REG] = 0x28,
+	[DSIM_ESCMODE_REG] = 0x2C,
+	[DSIM_MDRESOL_REG] = 0x3C,
+	[DSIM_MVPORCH_REG] = 0x104,
+	[DSIM_MHPORCH_REG] = 0x44,
+	[DSIM_MSYNC_REG] = 0x48,
+	[DSIM_CONFIG_REG] = 0x4C,
+	[DSIM_INTSRC_REG] = 0x50,
+	[DSIM_INTMSK_REG] = 0x54,
+	[DSIM_PKTHDR_REG] = 0x58,
+	[DSIM_PAYLOAD_REG] = 0x5C,
+	[DSIM_RXFIFO_REG] = 0x60,
+	[DSIM_SFRCTRL_REG] = 0x64,
+	[DSIM_FIFOCTRL_REG] = 0x68,
+	[DSIM_PLLCTRL_REG] = 0x94,
+	[DSIM_PHYCTRL_REG] = 0xA4,
+	[DSIM_PHYTIMING_REG] = 0xB4,
+	[DSIM_PHYTIMING1_REG] = 0xB8,
+	[DSIM_PHYTIMING2_REG] = 0xBC,
+};
+
 enum reg_value_idx {
 	RESET_TYPE,
 	PLL_TIMER,
@@ -678,6 +704,37 @@ static const struct samsung_dsim_driver_data imx8mm_dsi_driver_data = {
 	.min_freq = 1050,
 };
 
+static const struct samsung_dsim_driver_data zuma_dsi_driver_data = {
+	.reg_ofs = zuma_reg_ofs,
+	.plltmr_reg = 0xa0,
+	.has_clklane_stop = 1,
+	.has_sfrctrl = 1,
+	.clk_data = exynos7870_clk_bulk_data,
+	.num_clks = ARRAY_SIZE(exynos7870_clk_bulk_data),
+	.max_freq = 1500,
+	.wait_for_hdr_fifo = 0,
+	.wait_for_reset = 1,
+	// .num_bits_resol = 12,
+	.num_bits_resol = 13,
+	.video_mode_bit = 18,
+	.pll_stable_bit = 24,
+	.esc_clken_bit = 16,
+	.byte_clken_bit = 17,
+	.tx_req_hsclk_bit = 20,
+	.lane_esc_clk_bit = 8,
+	.lane_esc_data_offset = 9,
+	.pll_p_offset = 13,
+	.pll_m_offset = 3,
+	.pll_s_offset = 0,
+	.main_vsa_offset = 16,
+	.reg_values = exynos7870_reg_values,
+	.pll_fin_min = 6,
+	.pll_fin_max = 12,
+	.m_min = 41,
+	.m_max = 125,
+	.min_freq = 500,
+};
+
 static const struct samsung_dsim_driver_data *
 samsung_dsim_types[DSIM_TYPE_COUNT] = {
 	[DSIM_TYPE_EXYNOS3250] = &exynos3_dsi_driver_data,
@@ -688,6 +745,7 @@ samsung_dsim_types[DSIM_TYPE_COUNT] = {
 	[DSIM_TYPE_EXYNOS7870] = &exynos7870_dsi_driver_data,
 	[DSIM_TYPE_IMX8MM] = &imx8mm_dsi_driver_data,
 	[DSIM_TYPE_IMX8MP] = &imx8mm_dsi_driver_data,
+	[DSIM_TYPE_ZUMA] = &zuma_dsi_driver_data,
 };
 
 static inline struct samsung_dsim *host_to_dsi(struct mipi_dsi_host *h)

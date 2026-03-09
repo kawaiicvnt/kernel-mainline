@@ -31,6 +31,27 @@
 	status = "okay";
 };
 
+&drmdsim0 {
+	status = "okay";
+
+	google_gs_km4: panel@0 {
+		compatible = "google,gs-km4";
+		label = "google-km4";
+		reg = <0>;
+		channel = <0>;
+		touch = <&spitouch>;
+
+		reset-gpios = <&gpp0 0 GPIO_ACTIVE_HIGH>;
+		vddio-supply = <&reg_placeholder>;
+		vci-supply = <&reg_placeholder>;
+		poc-supply = <&reg_placeholder>;
+	};
+};
+
+&drmdecon0 {
+	status = "okay";
+};
+
 &spitouch {
 	st,dchip_id = /bits/ 8 <0x36 0x48>;
 	st,max-coords = <1079 2399>;

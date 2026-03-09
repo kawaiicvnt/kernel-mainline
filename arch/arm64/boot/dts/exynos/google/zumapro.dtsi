@@ -3590,6 +3590,13 @@
 			clocks = <&ext_26m>;
 			clock-names = "clkout0";
 
+			mipi_phy: mipi-phy {
+				compatible = "samsung,exynos7870-mipi-video-phy";
+				#phy-cells = <1>;
+				samsung,disp-sysreg = <&sysreg_dpu>;
+				samsung,cam0-sysreg = <&sysreg_cam0>;
+			};
+
 			poweroff: syscon-poweroff {
 				compatible = "syscon-poweroff";
 				offset = <0x3e9c>; /* PAD_CTRL_PWR_HOLD */
@@ -3726,10 +3733,122 @@
 			samsung,sysreg = <&sysreg_dpu>;
 		};
 
-		sysreg_dpu: syscon@1c020000 {
+		sysreg_cam0: sysreg_dpu: syscon@1c020000 {
 			compatible = "google,gs101-dpu-sysreg", "syscon";
 			reg = <0x1c020000 0x10000>;
 			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+		};
+
+		drmdsim0: dsi@19440000 {
+			compatible = "samsung,zuma-mipi-dsi";
+			reg = <0x19440000 0x300>;
+			interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>;
+
+			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clock-names = "bus", "pll", "byte", "esc";
+
+			vddcore-supply = <&reg_placeholder>;
+			vddio-supply = <&reg_placeholder>;
+
+			samsung,esc-clock-frequency = <20000000>;
+			samsung,pll-clock-frequency = <24000000>;
+			samsung,burst-clock-frequency = <1368000000>;
+			dsim,id = <0>;
+			te_from = <0>;
+			te-gpio = <&gpp0 3 0xf>;
+			phys = <&mipi_phy 1>;
+			phy-names = "dsim";
+
+			pinctrl-names = "hw_te_on", "hw_te_off";
+			pinctrl-0 = <&disp_te_pri_on>;
+			pinctrl-1 = <&disp_te_pri_off>;
+
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					dsim0_to_decon0: endpoint {
+						remote-endpoint = <&decon0_to_dsim>;
+					};
+				};
+			};
+		};
+
+		drmdsim1: dsi@19450000 {
+			compatible = "samsung,zuma-mipi-dsi";
+			reg = <0x19450000 0x300>;
+			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>;
+
+			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clock-names = "bus", "pll", "byte", "esc";
+
+			vddcore-supply = <&reg_placeholder>;
+			vddio-supply = <&reg_placeholder>;
+
+			samsung,esc-clock-frequency = <20000000>;
+			samsung,pll-clock-frequency = <24000000>;
+			samsung,burst-clock-frequency = <1368000000>;
+			dsim,id = <1>;
+			te_from = <1>;
+			te-gpio = <&gpp0 4 0xf>;
+			phys = <&mipi_phy 1>;
+			phy-names = "dsim";
+
+			pinctrl-names = "hw_te_on", "hw_te_off";
+			pinctrl-0 = <&disp_te_sec_on>;
+			pinctrl-1 = <&disp_te_sec_off>;
+
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					dsim1_to_decon0: endpoint {
+						remote-endpoint = <&decon0_to_dsim>;
+					};
+				};
+			};
+		};
+
+		drmdecon0: decon0: display-controller@19470000 {
+			compatible = "samsung,exynos7870-decon";
+			reg = <0x19470000 0x8000>;
+			interrupts = <GIC_SPI 243 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "fifo", "vsync", "lcd_sys";
+
+			clocks = <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>,
+				 <&cmu_dpu CLK_GOUT_DPU_SYSREG_DPU_PCLK>;
+			clock-names = "pclk_decon0", "aclk_decon0",
+				      "decon0_eclk", "decon0_vclk";
+
+			iommus = <&sysmmu_dpuf0>, <&sysmmu_dpuf1>;
+
+			status = "disabled";
+
+			port {
+				decon0_to_dsim: endpoint {
+					remote-endpoint = <&dsim0_to_decon0>;
+				};
+			};
 		};
 
 		/* HSI1 GEN3A_0 */
