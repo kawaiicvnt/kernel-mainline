@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Google KM4 panel driver (ZumaPro Komodo)
+ * Copyright (c) 2026
  *
- * Downstream-adapted DRM panel implementation for the in-tree Exynos DSIM path.
+ * Based on panel-samsung-s6e3fc2x01.c and downstream Google KM4 panel data.
  */
 
-#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
@@ -15,21 +14,19 @@
 
 #include <video/mipi_display.h>
 
+#include <drm/display/drm_dsc.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
-
-#define KM4_DEFAULT_BRIGHTNESS 1209
-#define KM4_MAX_BRIGHTNESS 4095
+#include <drm/drm_probe_helper.h>
 
 struct google_km4 {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
+	struct drm_dsc_config dsc;
 	struct regulator_bulk_data *supplies;
 	struct gpio_desc *reset_gpio;
-	struct backlight_device *backlight;
-	bool prepared;
-	bool enabled;
 };
 
 static const struct regulator_bulk_data google_km4_supplies[] = {
@@ -38,103 +35,107 @@ static const struct regulator_bulk_data google_km4_supplies[] = {
 	{ .supply = "poc" },
 };
 
-static const struct drm_display_mode google_km4_mode_60 = {
-	.clock = (1344 + 80 + 24 + 42) * (2992 + 12 + 4 + 22) * 60 / 1000,
-	.hdisplay = 1344,
-	.hsync_start = 1344 + 80,
-	.hsync_end = 1344 + 80 + 24,
-	.htotal = 1344 + 80 + 24 + 42,
-	.vdisplay = 2992,
-	.vsync_start = 2992 + 12,
-	.vsync_end = 2992 + 12 + 4,
-	.vtotal = 2992 + 12 + 4 + 22,
-	.width_mm = 70,
-	.height_mm = 156,
-	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
-};
-
-static const struct drm_display_mode google_km4_mode_120 = {
-	.clock = (1344 + 80 + 24 + 42) * (2992 + 12 + 4 + 22) * 120 / 1000,
-	.hdisplay = 1344,
-	.hsync_start = 1344 + 80,
-	.hsync_end = 1344 + 80 + 24,
-	.htotal = 1344 + 80 + 24 + 42,
-	.vdisplay = 2992,
-	.vsync_start = 2992 + 12,
-	.vsync_end = 2992 + 12 + 4,
-	.vtotal = 2992 + 12 + 4 + 22,
-	.width_mm = 70,
-	.height_mm = 156,
-	.type = DRM_MODE_TYPE_DRIVER,
-};
-
 static inline struct google_km4 *to_google_km4(struct drm_panel *panel)
 {
 	return container_of(panel, struct google_km4, panel);
 }
 
+/* DSCv1.2a 1344x2992 */
+static const struct drm_dsc_config google_km4_wqhd_pps_config = {
+	.line_buf_depth = 9,
+	.bits_per_component = 8,
+	.convert_rgb = true,
+	.slice_width = 672,
+	.slice_height = 34,
+	.slice_count = 2,
+	.simple_422 = false,
+	.pic_width = 1344,
+	.pic_height = 2992,
+	.rc_tgt_offset_high = 3,
+	.rc_tgt_offset_low = 3,
+	.bits_per_pixel = 128,
+	.rc_edge_factor = 6,
+	.rc_quant_incr_limit1 = 11,
+	.rc_quant_incr_limit0 = 11,
+	.initial_xmit_delay = 512,
+	.initial_dec_delay = 592,
+	.block_pred_enable = true,
+	.first_line_bpg_offset = 12,
+	.initial_offset = 6144,
+	.rc_buf_thresh = {
+		14, 28, 42, 56,
+		70, 84, 98, 105,
+		112, 119, 121, 123,
+		125, 126
+	},
+	.rc_range_params = {
+		{ .range_min_qp = 0, .range_max_qp = 4, .range_bpg_offset = 2 },
+		{ .range_min_qp = 0, .range_max_qp = 4, .range_bpg_offset = 0 },
+		{ .range_min_qp = 1, .range_max_qp = 5, .range_bpg_offset = 0 },
+		{ .range_min_qp = 1, .range_max_qp = 6, .range_bpg_offset = 62 },
+		{ .range_min_qp = 3, .range_max_qp = 7, .range_bpg_offset = 60 },
+		{ .range_min_qp = 3, .range_max_qp = 7, .range_bpg_offset = 58 },
+		{ .range_min_qp = 3, .range_max_qp = 7, .range_bpg_offset = 56 },
+		{ .range_min_qp = 3, .range_max_qp = 8, .range_bpg_offset = 56 },
+		{ .range_min_qp = 3, .range_max_qp = 9, .range_bpg_offset = 56 },
+		{ .range_min_qp = 3, .range_max_qp = 10, .range_bpg_offset = 54 },
+		{ .range_min_qp = 5, .range_max_qp = 11, .range_bpg_offset = 54 },
+		{ .range_min_qp = 5, .range_max_qp = 12, .range_bpg_offset = 52 },
+		{ .range_min_qp = 5, .range_max_qp = 13, .range_bpg_offset = 52 },
+		{ .range_min_qp = 7, .range_max_qp = 13, .range_bpg_offset = 52 },
+		{ .range_min_qp = 13, .range_max_qp = 15, .range_bpg_offset = 52 }
+	},
+	.rc_model_size = 8192,
+	.flatness_min_qp = 3,
+	.flatness_max_qp = 12,
+	.initial_scale_value = 32,
+	.scale_decrement_interval = 9,
+	.scale_increment_interval = 932,
+	.nfl_bpg_offset = 745,
+	.slice_bpg_offset = 616,
+	.final_offset = 4336,
+	.vbr_enable = false,
+	.slice_chunk_size = 672,
+	.dsc_version_minor = 2,
+	.dsc_version_major = 1,
+	.native_422 = false,
+	.native_420 = false,
+	.second_line_bpg_offset = 0,
+	.nsl_bpg_offset = 0,
+	.second_line_offset_adj = 0,
+};
+
 static void google_km4_reset(struct google_km4 *ctx)
 {
-	/* Downstream reset timing: 1ms assert, 1ms deassert, 5ms settle */
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(1000, 2000);
+	usleep_range(5000, 6000);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	usleep_range(1000, 2000);
 	usleep_range(5000, 6000);
 }
-
-static int google_km4_set_brightness(struct google_km4 *ctx, u16 brightness)
-{
-	int ret;
-
-	ret = mipi_dsi_dcs_set_display_brightness(ctx->dsi, brightness);
-	if (ret < 0)
-		dev_err(&ctx->dsi->dev, "failed to set brightness (%u): %d\n", brightness, ret);
-
-	return ret;
-}
-
-static int google_km4_bl_update_status(struct backlight_device *bl)
-{
-	struct google_km4 *ctx = bl_get_data(bl);
-	u16 brightness = backlight_get_brightness(bl);
-
-	if (!ctx->enabled)
-		return 0;
-
-	return google_km4_set_brightness(ctx, brightness);
-}
-
-static const struct backlight_ops google_km4_bl_ops = {
-	.update_status = google_km4_bl_update_status,
-};
 
 static int google_km4_on(struct google_km4 *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
 
-	/*
-	 * Minimal downstream-derived command sequence:
-	 * - unlock vendor page
-	 * - sleep out
-	 * - TE on
-	 * - default control display state
-	 */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xF0, 0x5A, 0x5A);
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 	mipi_dsi_msleep(&dsi_ctx, 120);
-	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, 0x20);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xF0, 0xA5, 0xA5);
 
-	if (dsi_ctx.accum_err < 0)
-		return dsi_ctx.accum_err;
-
-	return 0;
+	return dsi_ctx.accum_err;
 }
 
-static int google_km4_off(struct google_km4 *ctx)
+static int google_km4_enable(struct drm_panel *panel)
 {
+	struct google_km4 *ctx = to_google_km4(panel);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
+
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+
+	return dsi_ctx.accum_err;
+}
+
+static int google_km4_disable(struct drm_panel *panel)
+{
+	struct google_km4 *ctx = to_google_km4(panel);
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
 
 	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
@@ -150,9 +151,6 @@ static int google_km4_prepare(struct drm_panel *panel)
 	struct google_km4 *ctx = to_google_km4(panel);
 	int ret;
 
-	if (ctx->prepared)
-		return 0;
-
 	ret = regulator_bulk_enable(ARRAY_SIZE(google_km4_supplies), ctx->supplies);
 	if (ret < 0)
 		return ret;
@@ -166,43 +164,6 @@ static int google_km4_prepare(struct drm_panel *panel)
 		return ret;
 	}
 
-	ctx->prepared = true;
-	return 0;
-}
-
-static int google_km4_enable(struct drm_panel *panel)
-{
-	struct google_km4 *ctx = to_google_km4(panel);
-	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
-	int ret;
-
-	if (ctx->enabled)
-		return 0;
-
-	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
-	ret = dsi_ctx.accum_err;
-	if (ret < 0)
-		return ret;
-
-	if (ctx->backlight)
-		ret = google_km4_set_brightness(ctx, ctx->backlight->props.brightness);
-	if (ret < 0)
-		return ret;
-
-	ctx->enabled = true;
-	return 0;
-}
-
-static int google_km4_disable(struct drm_panel *panel)
-{
-	struct google_km4 *ctx = to_google_km4(panel);
-
-	if (!ctx->enabled)
-		return 0;
-
-	google_km4_off(ctx);
-	ctx->enabled = false;
-
 	return 0;
 }
 
@@ -210,37 +171,31 @@ static int google_km4_unprepare(struct drm_panel *panel)
 {
 	struct google_km4 *ctx = to_google_km4(panel);
 
-	if (!ctx->prepared)
-		return 0;
-
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	regulator_bulk_disable(ARRAY_SIZE(google_km4_supplies), ctx->supplies);
 
-	ctx->prepared = false;
 	return 0;
 }
+
+static const struct drm_display_mode google_km4_mode = {
+	.clock = (1344 + 80 + 24 + 42) * (2992 + 12 + 4 + 22) * 60 / 1000,
+	.hdisplay = 1344,
+	.hsync_start = 1344 + 80,
+	.hsync_end = 1344 + 80 + 24,
+	.htotal = 1344 + 80 + 24 + 42,
+	.vdisplay = 2992,
+	.vsync_start = 2992 + 12,
+	.vsync_end = 2992 + 12 + 4,
+	.vtotal = 2992 + 12 + 4 + 22,
+	.width_mm = 70,
+	.height_mm = 156,
+	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+};
 
 static int google_km4_get_modes(struct drm_panel *panel,
 				struct drm_connector *connector)
 {
-	struct drm_display_mode *mode;
-
-	mode = drm_mode_duplicate(connector->dev, &google_km4_mode_60);
-	if (!mode)
-		return -ENOMEM;
-	drm_mode_set_name(mode);
-	drm_mode_probed_add(connector, mode);
-
-	mode = drm_mode_duplicate(connector->dev, &google_km4_mode_120);
-	if (!mode)
-		return -ENOMEM;
-	drm_mode_set_name(mode);
-	drm_mode_probed_add(connector, mode);
-
-	connector->display_info.width_mm = google_km4_mode_60.width_mm;
-	connector->display_info.height_mm = google_km4_mode_60.height_mm;
-
-	return 2;
+	return drm_connector_helper_get_modes_fixed(connector, &google_km4_mode);
 }
 
 static const struct drm_panel_funcs google_km4_panel_funcs = {
@@ -254,7 +209,6 @@ static const struct drm_panel_funcs google_km4_panel_funcs = {
 static int google_km4_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
-	struct backlight_properties bl_props = { 0 };
 	struct google_km4 *ctx;
 	int ret;
 
@@ -269,38 +223,36 @@ static int google_km4_probe(struct mipi_dsi_device *dsi)
 					    google_km4_supplies,
 					    &ctx->supplies);
 	if (ret)
-		return dev_err_probe(dev, ret, "failed to get regulators\n");
+		return dev_err_probe(dev, ret, "Failed to get regulators\n");
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
-				     "failed to get reset GPIO\n");
-
-	bl_props.type = BACKLIGHT_RAW;
-	bl_props.max_brightness = KM4_MAX_BRIGHTNESS;
-	bl_props.brightness = KM4_DEFAULT_BRIGHTNESS;
-	ctx->backlight = devm_backlight_device_register(dev, dev_name(dev), dev, ctx,
-						&google_km4_bl_ops, &bl_props);
-	if (IS_ERR(ctx->backlight))
-		return dev_err_probe(dev, PTR_ERR(ctx->backlight),
-				     "failed to register backlight\n");
+				     "Failed to get reset-gpios\n");
 
 	ctx->dsi = dsi;
 	mipi_dsi_set_drvdata(dsi, ctx);
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS;
+	dsi->mode_flags = MIPI_DSI_MODE_LPM | MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
 	ctx->panel.prepare_prev_first = true;
-	ctx->panel.backlight = ctx->backlight;
+
+	/* Backlight DCS writes are disabled during early command-link bring-up. */
+	ctx->panel.backlight = NULL;
+
+	/* This panel only supports DSC; unconditionally enable it. */
+	ctx->dsc = google_km4_wqhd_pps_config;
+	dsi->dsc = &ctx->dsc;
 
 	drm_panel_add(&ctx->panel);
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
+		dev_err(dev, "Failed to attach to DSI host: %d\n", ret);
 		drm_panel_remove(&ctx->panel);
-		return dev_err_probe(dev, ret, "failed to attach DSI\n");
+		return ret;
 	}
 
 	return 0;
@@ -313,14 +265,13 @@ static void google_km4_remove(struct mipi_dsi_device *dsi)
 
 	ret = mipi_dsi_detach(dsi);
 	if (ret < 0)
-		dev_err(&dsi->dev, "failed to detach DSI host: %d\n", ret);
+		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
 
 	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id google_km4_of_match[] = {
 	{ .compatible = "google,gs-km4" },
-	{ .compatible = "google,km4" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, google_km4_of_match);
@@ -335,6 +286,6 @@ static struct mipi_dsi_driver google_km4_driver = {
 };
 module_mipi_dsi_driver(google_km4_driver);
 
-MODULE_AUTHOR("OpenAI Codex");
-MODULE_DESCRIPTION("DRM panel driver for Google KM4 (ZumaPro Komodo)");
+MODULE_AUTHOR("Codex");
+MODULE_DESCRIPTION("DRM panel driver for Google KM4");
 MODULE_LICENSE("GPL");
