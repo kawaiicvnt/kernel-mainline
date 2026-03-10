@@ -3770,6 +3770,7 @@
 			dsim,id = <0>;
 			te_from = <0>;
 			te-gpio = <&gpp0 3 0xf>;
+			te-gpios = <&gpp0 3 GPIO_ACTIVE_HIGH>;
 			phys = <&mipi_phy_dsim0_m4m4 0>;
 			phy-names = "dsim";
 
@@ -3816,6 +3817,7 @@
 			dsim,id = <1>;
 			te_from = <1>;
 			te-gpio = <&gpp0 4 0xf>;
+			te-gpios = <&gpp0 4 GPIO_ACTIVE_HIGH>;
 			phys = <&mipi_phy_dsim0_m4m4 0>;
 			phy-names = "dsim";
 
@@ -3840,8 +3842,12 @@
 		};
 
 		drmdecon0: decon0: display-controller@19470000 {
-			compatible = "google,zuma-decon", "samsung,exynos7870-decon";
-			reg = <0x19470000 0x8000>;
+			compatible = "google,zuma-decon";
+			reg = <0x19470000 0x6000>,
+			      <0x19480000 0xe000>,
+			      <0x19490000 0x10000>,
+			      <0x194a0000 0xe000>;
+			reg-names = "main", "win", "sub", "wincon";
 			interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 240 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 239 IRQ_TYPE_LEVEL_HIGH 0>;

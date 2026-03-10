@@ -15,9 +15,12 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/export.h>
+#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/irq.h>
 #include <linux/media-bus-format.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/units.h>
@@ -2139,19 +2142,40 @@ static irqreturn_t samsung_dsim_te_irq_handler(int irq, void *dev_id)
 
 static int samsung_dsim_register_te_irq(struct samsung_dsim *dsi, struct device *dev)
 {
+	struct device_node *np = dev->of_node;
 	int te_gpio_irq;
+	int te_gpio;
 	int ret;
 
 	dsi->te_gpio = devm_gpiod_get_optional(dev, "te", GPIOD_IN);
-	if (!dsi->te_gpio)
-		return 0;
-	else if (IS_ERR(dsi->te_gpio))
+	if (IS_ERR(dsi->te_gpio))
 		return dev_err_probe(dev, PTR_ERR(dsi->te_gpio), "failed to get te GPIO\n");
+	if (!dsi->te_gpio && np) {
+		te_gpio = of_get_named_gpio(np, "te-gpio", 0);
+		if (te_gpio == -EPROBE_DEFER)
+			return te_gpio;
+		if (gpio_is_valid(te_gpio)) {
+			dev_info(dsi->dev, "using legacy te-gpio %d\n", te_gpio);
+			ret = devm_gpio_request_one(dev, te_gpio, GPIOF_IN, "dsim-te");
+			if (ret)
+				return dev_err_probe(dev, ret,
+						     "failed to request legacy te-gpio\n");
+
+			dsi->te_gpio = gpio_to_desc(te_gpio);
+		}
+	}
+	if (!dsi->te_gpio) {
+		dev_warn(dsi->dev, "no TE GPIO found\n");
+		return 0;
+	}
 
 	te_gpio_irq = gpiod_to_irq(dsi->te_gpio);
+	dev_info(dsi->dev, "registered TE gpio irq %d\n", te_gpio_irq);
 
 	ret = request_threaded_irq(te_gpio_irq, samsung_dsim_te_irq_handler, NULL,
-				   IRQF_TRIGGER_RISING | IRQF_NO_AUTOEN, "TE", dsi);
+				   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+				   IRQF_NO_AUTOEN,
+				   "TE", dsi);
 	if (ret) {
 		dev_err(dsi->dev, "request interrupt failed with %d\n", ret);
 		gpiod_put(dsi->te_gpio);
@@ -2247,7 +2271,7 @@ of_find_panel_or_bridge:
 	 * TE interrupt handler.
 	 */
 	if (!(device->mode_flags & MIPI_DSI_MODE_VIDEO)) {
-		ret = samsung_dsim_register_te_irq(dsi, &device->dev);
+		ret = samsung_dsim_register_te_irq(dsi, dsi->dev);
 		if (ret)
 			goto err_remove_bridge;
 	}

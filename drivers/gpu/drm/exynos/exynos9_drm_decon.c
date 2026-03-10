@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-/* drivers/gpu/drm/exynos/exynos7_drm_decon.c
+/* drivers/gpu/drm/exynos/exynos9_drm_decon.c
  *
  * Copyright (C) 2014 Samsung Electronics Co.Ltd
  * Authors:
@@ -9,6 +9,7 @@
 
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -28,7 +29,7 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_plane.h"
-#include "regs-decon7.h"
+#include "regs-decon9.h"
 
 /*
  * DECON stands for Display and Enhancement controller.
@@ -42,10 +43,15 @@ struct decon_data {
 	unsigned int vidw_buf_start_base;
 	unsigned int shadowcon_win_protect_shift;
 	unsigned int wincon_burstlen_shift;
+	u32 hw_trig_sel;
 	bool use_frame_start_irq;
+	bool use_dpu_irq_regs;
+	bool use_shd_reg_up_req;
+	bool command_mode;
+	bool sw_trigger;
 };
 
-static const struct decon_data exynos7_decon_data = {
+static const struct decon_data exynos9_decon_data = {
 	.vidw_buf_start_base = 0x80,
 	.shadowcon_win_protect_shift = 10,
 	.wincon_burstlen_shift = 11,
@@ -55,6 +61,18 @@ static const struct decon_data exynos7870_decon_data = {
 	.vidw_buf_start_base = 0x880,
 	.shadowcon_win_protect_shift = 8,
 	.wincon_burstlen_shift = 10,
+};
+
+static const struct decon_data zuma_decon_data = {
+	.vidw_buf_start_base = 0x880,
+	.shadowcon_win_protect_shift = 8,
+	.wincon_burstlen_shift = 10,
+	.hw_trig_sel = HW_TRIG_SEL_FROM_DDI0,
+	.use_frame_start_irq = true,
+	.use_dpu_irq_regs = true,
+	.use_shd_reg_up_req = true,
+	.command_mode = true,
+	.sw_trigger = false,
 };
 
 struct decon_context {
@@ -69,7 +87,14 @@ struct decon_context {
 	struct clk			*eclk;
 	struct clk			*vclk;
 	void __iomem			*regs;
+	void __iomem			*win_regs;
+	void __iomem			*sub_regs;
+	void __iomem			*wincon_regs;
 	unsigned long			irq_flags;
+	int				irq;
+	int				irq_fs;
+	int				irq_fd;
+	int				irq_ext;
 	bool				i80_if;
 	wait_queue_head_t		wait_vsync_queue;
 	atomic_t			wait_vsync_event;
@@ -78,9 +103,44 @@ struct decon_context {
 	struct drm_encoder *encoder;
 };
 
+static void decon_te_handler(struct exynos_drm_crtc *crtc);
+
+static inline u32 decon_read(struct decon_context *ctx, u32 reg)
+{
+	return readl(ctx->regs + reg);
+}
+
+static inline void decon_write(struct decon_context *ctx, u32 reg, u32 val)
+{
+	writel(val, ctx->regs + reg);
+}
+
+static inline u32 decon_win_read(struct decon_context *ctx, u32 reg)
+{
+	return readl(ctx->win_regs + reg);
+}
+
+static inline void decon_win_write(struct decon_context *ctx, u32 reg, u32 val)
+{
+	writel(val, ctx->win_regs + reg);
+}
+
+static inline u32 decon_wincon_read(struct decon_context *ctx, u32 reg)
+{
+	return readl(ctx->wincon_regs + reg);
+}
+
+static inline void decon_wincon_write(struct decon_context *ctx, u32 reg, u32 val)
+{
+	writel(val, ctx->wincon_regs + reg);
+}
+
 static int decon_get_irq(struct platform_device *pdev, struct decon_context *ctx)
 {
 	int ret;
+
+	if (ctx->data->use_dpu_irq_regs)
+		return 0;
 
 	if (ctx->data->use_frame_start_irq && !ctx->i80_if) {
 		ret = platform_get_irq_byname_optional(pdev, "frame_start");
@@ -91,14 +151,202 @@ static int decon_get_irq(struct platform_device *pdev, struct decon_context *ctx
 	return platform_get_irq_byname(pdev, ctx->i80_if ? "lcd_sys" : "vsync");
 }
 
+static void decon_irq_clear_all(struct decon_context *ctx)
+{
+	u32 val;
+
+	val = decon_read(ctx, DECON_INT_PEND);
+	if (val)
+		decon_write(ctx, DECON_INT_PEND, val);
+
+	val = decon_read(ctx, DECON_INT_PEND_EXTRA);
+	if (val)
+		decon_write(ctx, DECON_INT_PEND_EXTRA, val);
+}
+
+static void decon_dpu_set_irqs(struct decon_context *ctx, bool enable)
+{
+	u32 val;
+
+	decon_irq_clear_all(ctx);
+
+	if (enable) {
+		val = INT_EN_FRAME_DONE | INT_EN_FRAME_START |
+		      INT_EN_EXTRA | INT_EN;
+		decon_write(ctx, DECON_INT_EN, val);
+		decon_write(ctx, DECON_INT_EN_EXTRA,
+			    INT_EN_RESOURCE_CONFLICT | INT_EN_TIME_OUT);
+	} else {
+		decon_write(ctx, DECON_INT_EN_EXTRA, 0);
+		decon_write(ctx, DECON_INT_EN, 0);
+	}
+}
+
+static void decon_trigger_shadow_update(struct decon_context *ctx,
+					unsigned int win)
+{
+	u32 mask;
+	u32 val;
+
+	if (!ctx->data->use_shd_reg_up_req) {
+		val = decon_read(ctx, DECON_UPDATE);
+		val |= DECON_UPDATE_STANDALONE_F;
+		decon_write(ctx, DECON_UPDATE, val);
+		return;
+	}
+
+	mask = SHD_REG_UP_REQ_GLOBAL | SHD_REG_UP_REQ_CMP;
+	if (win < WINDOWS_NR)
+		mask |= SHD_REG_UP_REQ_WIN(win);
+	else
+		mask |= SHD_REG_UP_REQ_FOR_DECON;
+
+	val = decon_read(ctx, SHD_REG_UP_REQ);
+	val |= mask;
+	decon_write(ctx, SHD_REG_UP_REQ, val);
+}
+
+static void decon_set_operation_mode(struct decon_context *ctx, bool command_mode)
+{
+	u32 val;
+
+	val = decon_read(ctx, GLOBAL_CON);
+	val &= ~GLOBAL_CON_OPERATION_MODE_F;
+	val |= command_mode ? GLOBAL_CON_OPERATION_MODE_CMD_F :
+			      GLOBAL_CON_OPERATION_MODE_VIDEO_F;
+	decon_write(ctx, GLOBAL_CON, val);
+}
+
+static void decon_init_trigger(struct decon_context *ctx, bool command_mode,
+			       bool sw_trigger)
+{
+	u32 val;
+	u32 mask;
+
+	if (!command_mode)
+		val = HW_TRIG_EN;
+	else if (sw_trigger)
+		val = 0;
+	else
+		val = HW_TRIG_EN;
+
+	mask = HW_TRIG_EN | HW_TRIG_SEL_MASK | HW_TRIG_MASK_DECON;
+	val |= ctx->data->hw_trig_sel;
+	val |= HW_TRIG_MASK_DECON;
+	decon_write(ctx, TRIG_CON,
+		    (decon_read(ctx, TRIG_CON) & ~mask) | (val & mask));
+}
+
+static void decon_set_trigger_mask(struct decon_context *ctx, bool masked)
+{
+	u32 val;
+
+	if (!ctx->data->command_mode)
+		return;
+
+	val = decon_read(ctx, TRIG_CON);
+	if (masked)
+		val |= HW_TRIG_MASK_DECON;
+	else
+		val &= ~HW_TRIG_MASK_DECON;
+
+	decon_write(ctx, TRIG_CON, val);
+}
+
+static void decon_unmask_trigger(struct decon_context *ctx)
+{
+	if (!ctx->data->command_mode)
+		return;
+
+	if (ctx->data->sw_trigger) {
+		u32 val = decon_read(ctx, TRIG_CON);
+
+		val |= SW_TRIG_EN | SW_TRIG_DET_EN;
+		decon_write(ctx, TRIG_CON, val);
+		return;
+	}
+
+	decon_set_trigger_mask(ctx, false);
+}
+
+static void decon_set_color_map(struct decon_context *ctx, unsigned int win,
+				unsigned int width, unsigned int height)
+{
+	u32 val;
+
+	/* Solid black window as a bring-up fallback until DPP planes are wired. */
+	decon_win_write(ctx, WIN_START_POSITION(win),
+			WIN_STRPTR_Y_F(0) | WIN_STRPTR_X_F(0));
+	decon_win_write(ctx, WIN_END_POSITION(win),
+			WIN_ENDPTR_Y_F(height - 1) | WIN_ENDPTR_X_F(width - 1));
+	decon_win_write(ctx, WIN_START_TIME_CON(win), 0);
+
+	decon_win_write(ctx, WIN_COLORMAP_0(win),
+			WIN_MAPCOLOR_A_F(0xff) | WIN_MAPCOLOR_R_F(0x0));
+	decon_win_write(ctx, WIN_COLORMAP_1(win),
+			WIN_MAPCOLOR_G_F(0x0) | WIN_MAPCOLOR_B_F(0x0));
+
+	val = decon_wincon_read(ctx, DECON_CON_WIN(win));
+	val &= ~WIN_CHMAP_MASK;
+	val |= WIN_CHMAP_F(0);
+	val |= WIN_MAPCOLOR_EN_F | _WIN_EN_F;
+	decon_wincon_write(ctx, DECON_CON_WIN(win), val);
+}
+
+static void decon_init_dpu(struct decon_context *ctx)
+{
+	u32 val;
+
+	decon_write(ctx, GLOBAL_CON, GLOBAL_CON_SRESET);
+
+	val = decon_read(ctx, CLOCK_CON(0));
+	val &= ~(CLOCK_CON_AUTO_CG_MASK | CLOCK_CON_QACTIVE_MASK);
+	decon_write(ctx, CLOCK_CON(0), val);
+
+	decon_set_operation_mode(ctx, ctx->data->command_mode);
+	decon_init_trigger(ctx, ctx->data->command_mode, ctx->data->sw_trigger);
+	decon_irq_clear_all(ctx);
+}
+
+static void decon_commit_dpu(struct decon_context *ctx,
+			     const struct drm_display_mode *mode)
+{
+	u32 val;
+	u32 status;
+	int ret;
+
+	decon_set_color_map(ctx, 0, mode->hdisplay, mode->vdisplay);
+
+	decon_write(ctx, DATA_PATH_CON_0, COMP_OUTIF_PATH_F(0x001));
+
+	val = BLENDER_BG_HEIGHT_F(mode->vdisplay) |
+	      BLENDER_BG_WIDTH_F(mode->hdisplay);
+	decon_write(ctx, BLD_BG_IMG_SIZE_PRI, val);
+
+	val = OUTFIFO_HEIGHT_F(mode->vdisplay) |
+	      OUTFIFO_WIDTH_F(mode->hdisplay);
+	decon_write(ctx, OF_SIZE_0, val);
+
+	decon_write(ctx, DECON_INT_PEND, INT_PEND_FRAME_START);
+	val = decon_read(ctx, GLOBAL_CON) |
+	      GLOBAL_CON_DECON_EN | GLOBAL_CON_DECON_EN_F;
+	decon_write(ctx, GLOBAL_CON, val);
+
+	decon_trigger_shadow_update(ctx, WINDOWS_NR);
+
+	ret = readl_poll_timeout_atomic(ctx->regs + GLOBAL_CON, status,
+					status & GLOBAL_CON_RUN_STATUS,
+					10, 2000);
+	if (ret)
+		dev_warn(ctx->dev, "timed out waiting for DECON run status\n");
+
+	decon_unmask_trigger(ctx);
+}
+
 static const struct of_device_id decon_driver_dt_match[] = {
 	{
-		.compatible = "samsung,exynos7-decon",
-		.data = &exynos7_decon_data,
-	},
-	{
-		.compatible = "samsung,exynos7870-decon",
-		.data = &exynos7870_decon_data,
+		.compatible = "google,zuma-decon",
+		.data = &zuma_decon_data,
 	},
 	{},
 };
@@ -163,6 +411,9 @@ static void decon_clear_channels(struct decon_context *ctx)
 	unsigned int win, ch_enabled = 0;
 	u32 val;
 
+	if (ctx->data->use_dpu_irq_regs)
+		return;
+
 	/* Check if any channel is enabled. */
 	for (win = 0; win < WINDOWS_NR; win++) {
 		val = readl(ctx->regs + WINCON(win));
@@ -178,9 +429,7 @@ static void decon_clear_channels(struct decon_context *ctx)
 		}
 	}
 
-	val = readl(ctx->regs + DECON_UPDATE);
-	val |= DECON_UPDATE_STANDALONE_F;
-	writel(val, ctx->regs + DECON_UPDATE);
+	decon_trigger_shadow_update(ctx, WINDOWS_NR);
 
 	/* Wait for vsync, as disable channel takes effect at next vsync */
 	if (ch_enabled)
@@ -224,6 +473,11 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 	/* nothing to do if we haven't set the mode yet */
 	if (mode->htotal == 0 || mode->vtotal == 0)
 		return;
+
+	if (ctx->data->use_dpu_irq_regs) {
+		decon_commit_dpu(ctx, mode);
+		return;
+	}
 
 	if (!ctx->i80_if) {
 		int vsync_len, vbpd, vfpd, hsync_len, hbpd, hfpd;
@@ -272,9 +526,10 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 		writel(val, ctx->regs + VCLKCON2);
 	}
 
-	val = readl(ctx->regs + DECON_UPDATE);
-	val |= DECON_UPDATE_STANDALONE_F;
-	writel(val, ctx->regs + DECON_UPDATE);
+	if (ctx->data->use_dpu_irq_regs)
+		writel(INT_PEND_FRAME_START, ctx->regs + DECON_INT_PEND);
+
+	decon_trigger_shadow_update(ctx, WINDOWS_NR);
 }
 
 static int decon_enable_vblank(struct exynos_drm_crtc *crtc)
@@ -283,6 +538,11 @@ static int decon_enable_vblank(struct exynos_drm_crtc *crtc)
 	u32 val;
 
 	if (!test_and_set_bit(0, &ctx->irq_flags)) {
+	if (ctx->data->use_dpu_irq_regs) {
+		enable_irq(ctx->irq_fs);
+		return 0;
+	}
+
 		val = readl(ctx->regs + VIDINTCON0);
 
 		val |= VIDINTCON0_INT_ENABLE;
@@ -305,6 +565,11 @@ static void decon_disable_vblank(struct exynos_drm_crtc *crtc)
 	u32 val;
 
 	if (test_and_clear_bit(0, &ctx->irq_flags)) {
+		if (ctx->data->use_dpu_irq_regs) {
+			disable_irq_nosync(ctx->irq_fs);
+			return;
+		}
+
 		val = readl(ctx->regs + VIDINTCON0);
 
 		val &= ~VIDINTCON0_INT_ENABLE;
@@ -406,6 +671,9 @@ static void decon_atomic_begin(struct exynos_drm_crtc *crtc)
 	struct decon_context *ctx = crtc->ctx;
 	int i;
 
+	if (ctx->data->use_dpu_irq_regs)
+		return;
+
 	for (i = 0; i < WINDOWS_NR; i++)
 		decon_shadow_protect_win(ctx, i, true);
 }
@@ -425,6 +693,9 @@ static void decon_update_plane(struct exynos_drm_crtc *crtc,
 	unsigned int cpp = fb->format->cpp[0];
 	unsigned int pitch = fb->pitches[0];
 	unsigned int vidw_addr0_base = ctx->data->vidw_buf_start_base;
+
+	if (ctx->data->use_dpu_irq_regs)
+		return;
 
 	/*
 	 * SHADOWCON/PRTCON register is used for enabling timing.
@@ -501,9 +772,7 @@ static void decon_update_plane(struct exynos_drm_crtc *crtc,
 	/* Enable DMA channel and unprotect windows */
 	decon_shadow_protect_win(ctx, win, false);
 
-	val = readl(ctx->regs + DECON_UPDATE);
-	val |= DECON_UPDATE_STANDALONE_F;
-	writel(val, ctx->regs + DECON_UPDATE);
+	decon_trigger_shadow_update(ctx, win);
 }
 
 static void decon_disable_plane(struct exynos_drm_crtc *crtc,
@@ -513,6 +782,9 @@ static void decon_disable_plane(struct exynos_drm_crtc *crtc,
 	unsigned int win = plane->index;
 	u32 val;
 
+	if (ctx->data->use_dpu_irq_regs)
+		return;
+
 	/* protect windows */
 	decon_shadow_protect_win(ctx, win, true);
 
@@ -521,24 +793,40 @@ static void decon_disable_plane(struct exynos_drm_crtc *crtc,
 	val &= ~WINCONx_ENWIN;
 	writel(val, ctx->regs + WINCON(win));
 
-	val = readl(ctx->regs + DECON_UPDATE);
-	val |= DECON_UPDATE_STANDALONE_F;
-	writel(val, ctx->regs + DECON_UPDATE);
+	decon_trigger_shadow_update(ctx, win);
 }
 
 static void decon_atomic_flush(struct exynos_drm_crtc *crtc)
 {
 	struct decon_context *ctx = crtc->ctx;
+	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
 	int i;
 
-	for (i = 0; i < WINDOWS_NR; i++)
-		decon_shadow_protect_win(ctx, i, false);
-	exynos_crtc_handle_event(crtc);
+	if (!ctx->data->use_dpu_irq_regs)
+		for (i = 0; i < WINDOWS_NR; i++)
+			decon_shadow_protect_win(ctx, i, false);
+
+	/*
+	 * Arm the vblank event before triggering command-mode hardware so the
+	 * first TE/frame start after unmasking cannot race past the event arm.
+	 */
+	if (ctx->data->use_dpu_irq_regs)
+		exynos_crtc_handle_event(crtc);
+
+	if (ctx->data->use_dpu_irq_regs)
+		decon_commit_dpu(ctx, mode);
+	else
+		exynos_crtc_handle_event(crtc);
 }
 
 static void decon_init(struct decon_context *ctx)
 {
 	u32 val;
+
+	if (ctx->data->use_dpu_irq_regs) {
+		decon_init_dpu(ctx);
+		return;
+	}
 
 	writel(VIDCON0_SWRESET, ctx->regs + VIDCON0);
 
@@ -566,11 +854,17 @@ static void decon_atomic_enable(struct exynos_drm_crtc *crtc)
 
 	decon_init(ctx);
 
+	if (ctx->data->use_dpu_irq_regs) {
+		decon_dpu_set_irqs(ctx, true);
+		enable_irq(ctx->irq_fd);
+		if (ctx->irq_ext >= 0)
+			enable_irq(ctx->irq_ext);
+	}
+
 	/* if vblank was enabled status, enable it again. */
 	if (test_and_clear_bit(0, &ctx->irq_flags))
 		decon_enable_vblank(ctx->crtc);
 
-	decon_commit(ctx->crtc);
 }
 
 static void decon_atomic_disable(struct exynos_drm_crtc *crtc)
@@ -586,6 +880,15 @@ static void decon_atomic_disable(struct exynos_drm_crtc *crtc)
 	for (i = 0; i < WINDOWS_NR; i++)
 		decon_disable_plane(crtc, &ctx->planes[i]);
 
+	if (ctx->data->use_dpu_irq_regs) {
+		disable_irq_nosync(ctx->irq_fd);
+		if (ctx->irq_ext >= 0)
+			disable_irq_nosync(ctx->irq_ext);
+		if (test_bit(0, &ctx->irq_flags))
+			disable_irq_nosync(ctx->irq_fs);
+		decon_dpu_set_irqs(ctx, false);
+	}
+
 	pm_runtime_put_sync(ctx->dev);
 }
 
@@ -598,6 +901,7 @@ static const struct exynos_drm_crtc_ops decon_crtc_ops = {
 	.update_plane = decon_update_plane,
 	.disable_plane = decon_disable_plane,
 	.atomic_flush = decon_atomic_flush,
+	.te_handler = decon_te_handler,
 };
 
 
@@ -605,6 +909,31 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_id)
 {
 	struct decon_context *ctx = (struct decon_context *)dev_id;
 	u32 val, clear_bit;
+
+	if (ctx->data->use_dpu_irq_regs) {
+		val = decon_read(ctx, DECON_INT_PEND);
+		if (val)
+			decon_write(ctx, DECON_INT_PEND, val);
+
+		if ((val & INT_PEND_FRAME_DONE) && ctx->data->command_mode) {
+			if (ctx->drm_dev && drm_dev_has_vblank(ctx->drm_dev)) {
+				drm_crtc_handle_vblank(&ctx->crtc->base);
+				if (atomic_read(&ctx->wait_vsync_event)) {
+					atomic_set(&ctx->wait_vsync_event, 0);
+					wake_up(&ctx->wait_vsync_queue);
+				}
+			}
+			decon_set_trigger_mask(ctx, true);
+		}
+
+		if (val & INT_PEND_EXTRA) {
+			clear_bit = decon_read(ctx, DECON_INT_PEND_EXTRA);
+			if (clear_bit)
+				decon_write(ctx, DECON_INT_PEND_EXTRA, clear_bit);
+		}
+
+		return IRQ_HANDLED;
+	}
 
 	val = readl(ctx->regs + VIDINTCON1);
 
@@ -636,6 +965,13 @@ out:
 static irqreturn_t decon_frame_start_irq_handler(int irq, void *dev_id)
 {
 	struct decon_context *ctx = dev_id;
+	u32 val;
+
+	if (ctx->data->use_dpu_irq_regs) {
+		val = decon_read(ctx, DECON_INT_PEND);
+		if (val & INT_PEND_FRAME_START)
+			decon_write(ctx, DECON_INT_PEND, INT_PEND_FRAME_START);
+	}
 
 	if (!ctx->drm_dev)
 		return IRQ_HANDLED;
@@ -651,6 +987,76 @@ static irqreturn_t decon_frame_start_irq_handler(int irq, void *dev_id)
 	}
 
 	return IRQ_HANDLED;
+}
+
+static void decon_te_handler(struct exynos_drm_crtc *crtc)
+{
+	struct decon_context *ctx = crtc->ctx;
+
+	if (!ctx->data->command_mode)
+		return;
+
+	if (!ctx->drm_dev)
+		return;
+
+	if (!drm_dev_has_vblank(ctx->drm_dev))
+		return;
+
+	dev_info(ctx->dev, "TE vblank\n");
+	drm_crtc_handle_vblank(&ctx->crtc->base);
+
+	if (atomic_read(&ctx->wait_vsync_event)) {
+		atomic_set(&ctx->wait_vsync_event, 0);
+		wake_up(&ctx->wait_vsync_queue);
+	}
+}
+
+static int decon_request_irqs(struct platform_device *pdev,
+			      struct decon_context *ctx)
+{
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	if (!ctx->data->use_dpu_irq_regs) {
+		ret = decon_get_irq(pdev, ctx);
+		if (ret < 0)
+			return ret;
+
+		ctx->irq = ret;
+		return devm_request_irq(dev, ctx->irq,
+					ctx->data->use_frame_start_irq && !ctx->i80_if ?
+					decon_frame_start_irq_handler :
+					decon_irq_handler,
+					0, "drm_decon", ctx);
+	}
+
+	ctx->irq_fs = platform_get_irq_byname(pdev, "frame_start");
+	if (ctx->irq_fs < 0)
+		return ctx->irq_fs;
+
+	ret = devm_request_irq(dev, ctx->irq_fs, decon_frame_start_irq_handler,
+			       0, "drm_decon_fs", ctx);
+	if (ret)
+		return ret;
+
+	ctx->irq_fd = platform_get_irq_byname(pdev, "frame_done");
+	if (ctx->irq_fd < 0)
+		return ctx->irq_fd;
+
+	ret = devm_request_irq(dev, ctx->irq_fd, decon_irq_handler,
+			       0, "drm_decon_fd", ctx);
+	if (ret)
+		return ret;
+
+	ctx->irq_ext = platform_get_irq_byname_optional(pdev, "extra");
+	if (ctx->irq_ext >= 0) {
+		ret = devm_request_irq(dev, ctx->irq_ext, decon_irq_handler,
+				       0, "drm_decon_ext", ctx);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int decon_bind(struct device *dev, struct device *master, void *data)
@@ -734,8 +1140,37 @@ static int decon_probe(struct platform_device *pdev)
 		ctx->i80_if = true;
 	of_node_put(i80_if_timings);
 
-	ctx->regs = of_iomap(dev->of_node, 0);
-	if (!ctx->regs)
+	ctx->regs = devm_platform_ioremap_resource_byname(pdev, "main");
+	if (IS_ERR(ctx->regs)) {
+		if (PTR_ERR(ctx->regs) != -EINVAL)
+			return PTR_ERR(ctx->regs);
+		ctx->regs = of_iomap(dev->of_node, 0);
+		if (!ctx->regs)
+			return -ENOMEM;
+	}
+
+	ctx->win_regs = devm_platform_ioremap_resource_byname(pdev, "win");
+	if (IS_ERR(ctx->win_regs)) {
+		if (PTR_ERR(ctx->win_regs) != -EINVAL)
+			return PTR_ERR(ctx->win_regs);
+		ctx->win_regs = ctx->regs;
+	}
+
+	ctx->sub_regs = devm_platform_ioremap_resource_byname(pdev, "sub");
+	if (IS_ERR(ctx->sub_regs)) {
+		if (PTR_ERR(ctx->sub_regs) != -EINVAL)
+			return PTR_ERR(ctx->sub_regs);
+		ctx->sub_regs = ctx->regs;
+	}
+
+	ctx->wincon_regs = devm_platform_ioremap_resource_byname(pdev, "wincon");
+	if (IS_ERR(ctx->wincon_regs)) {
+		if (PTR_ERR(ctx->wincon_regs) != -EINVAL)
+			return PTR_ERR(ctx->wincon_regs);
+		ctx->wincon_regs = ctx->regs;
+	}
+
+	if (!ctx->regs || !ctx->win_regs || !ctx->wincon_regs)
 		return -ENOMEM;
 
 	ctx->pclk = devm_clk_get(dev, "pclk_decon0");
@@ -766,17 +1201,17 @@ static int decon_probe(struct platform_device *pdev)
 		goto err_iounmap;
 	}
 
-	ret = decon_get_irq(pdev, ctx);
-	if (ret < 0)
-		goto err_iounmap;
-
-	ret = devm_request_irq(dev, ret,
-			       ctx->data->use_frame_start_irq && !ctx->i80_if ?
-			       decon_frame_start_irq_handler : decon_irq_handler,
-			       0, "drm_decon", ctx);
+	ret = decon_request_irqs(pdev, ctx);
 	if (ret) {
 		dev_err(dev, "irq request failed.\n");
 		goto err_iounmap;
+	}
+
+	if (ctx->data->use_dpu_irq_regs) {
+		disable_irq(ctx->irq_fs);
+		disable_irq(ctx->irq_fd);
+		if (ctx->irq_ext >= 0)
+			disable_irq(ctx->irq_ext);
 	}
 
 	init_waitqueue_head(&ctx->wait_vsync_queue);
@@ -818,7 +1253,7 @@ static void decon_remove(struct platform_device *pdev)
 	component_del(&pdev->dev, &decon_component_ops);
 }
 
-static int exynos7_decon_suspend(struct device *dev)
+static int exynos9_decon_suspend(struct device *dev)
 {
 	struct decon_context *ctx = dev_get_drvdata(dev);
 
@@ -830,7 +1265,7 @@ static int exynos7_decon_suspend(struct device *dev)
 	return 0;
 }
 
-static int exynos7_decon_resume(struct device *dev)
+static int exynos9_decon_resume(struct device *dev)
 {
 	struct decon_context *ctx = dev_get_drvdata(dev);
 	int ret;
@@ -875,15 +1310,15 @@ err_pclk_enable:
 	return ret;
 }
 
-static DEFINE_RUNTIME_DEV_PM_OPS(exynos7_decon_pm_ops, exynos7_decon_suspend,
-				 exynos7_decon_resume, NULL);
+static DEFINE_RUNTIME_DEV_PM_OPS(exynos9_decon_pm_ops, exynos9_decon_suspend,
+				 exynos9_decon_resume, NULL);
 
-struct platform_driver decon_driver = {
+struct platform_driver exynos9_decon_driver = {
 	.probe		= decon_probe,
 	.remove		= decon_remove,
 	.driver		= {
-		.name	= "exynos-decon",
-		.pm	= pm_ptr(&exynos7_decon_pm_ops),
+		.name	= "exynos9-decon",
+		.pm	= pm_ptr(&exynos9_decon_pm_ops),
 		.of_match_table = decon_driver_dt_match,
 	},
 };

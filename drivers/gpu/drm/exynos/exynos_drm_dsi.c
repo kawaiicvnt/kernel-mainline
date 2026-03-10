@@ -27,7 +27,7 @@ static irqreturn_t exynos_dsi_te_irq_handler(struct samsung_dsim *dsim)
 	struct exynos_dsi *dsi = dsim->priv;
 	struct drm_encoder *encoder = &dsi->encoder;
 
-	if (dsim->state & DSIM_STATE_VIDOUT_AVAILABLE)
+	if (encoder->crtc)
 		exynos_drm_crtc_te_handler(encoder->crtc);
 
 	return IRQ_HANDLED;

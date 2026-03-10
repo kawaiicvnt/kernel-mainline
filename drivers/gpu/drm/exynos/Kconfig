@@ -36,6 +36,13 @@ config DRM_EXYNOS7_DECON
 	help
 	  Choose this option if you want to use Exynos DECON for DRM.
 
+config DRM_EXYNOS9_DECON
+	bool "DECON on Exynos9/Tensor-style DPU"
+	depends on !FB_S3C
+	help
+	  Choose this option if you want to use newer Samsung/Tensor style
+	  DECON blocks for DRM.
+
 config DRM_EXYNOS_MIXER
 	bool "Mixer"
 	help
@@ -58,7 +65,7 @@ config DRM_EXYNOS_DPI
 
 config DRM_EXYNOS_DSI
 	bool "MIPI-DSI host"
-	depends on DRM_EXYNOS_FIMD || DRM_EXYNOS5433_DECON || DRM_EXYNOS7_DECON
+	depends on DRM_EXYNOS_FIMD || DRM_EXYNOS5433_DECON || DRM_EXYNOS7_DECON || DRM_EXYNOS9_DECON
 	select DRM_MIPI_DSI
 	select DRM_PANEL
 	select DRM_SAMSUNG_DSIM
@@ -68,7 +75,7 @@ config DRM_EXYNOS_DSI
 
 config DRM_EXYNOS_DP
 	bool "Exynos specific extensions for Analogix DP driver"
-	depends on DRM_EXYNOS_FIMD || DRM_EXYNOS7_DECON
+	depends on DRM_EXYNOS_FIMD || DRM_EXYNOS7_DECON || DRM_EXYNOS9_DECON
 	select DRM_ANALOGIX_DP
 	select DRM_DISPLAY_DP_HELPER
 	default DRM_EXYNOS

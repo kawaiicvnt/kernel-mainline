@@ -169,6 +169,9 @@ static struct exynos_drm_driver_info exynos_drm_drivers[] = {
 		DRV_PTR(decon_driver, CONFIG_DRM_EXYNOS7_DECON),
 		DRM_COMPONENT_DRIVER
 	}, {
+		DRV_PTR(exynos9_decon_driver, CONFIG_DRM_EXYNOS9_DECON),
+		DRM_COMPONENT_DRIVER
+	}, {
 		DRV_PTR(mixer_driver, CONFIG_DRM_EXYNOS_MIXER),
 		DRM_COMPONENT_DRIVER
 	}, {

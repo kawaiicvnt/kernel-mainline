@@ -115,17 +115,14 @@ static int google_km4_on(struct google_km4 *ctx)
 
 	/*
 	 * Minimal downstream-derived command sequence:
-	 * - unlock vendor page
 	 * - sleep out
 	 * - TE on
 	 * - default control display state
 	 */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xF0, 0x5A, 0x5A);
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 	mipi_dsi_msleep(&dsi_ctx, 120);
 	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, 0x20);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xF0, 0xA5, 0xA5);
 
 	if (dsi_ctx.accum_err < 0)
 		return dsi_ctx.accum_err;
