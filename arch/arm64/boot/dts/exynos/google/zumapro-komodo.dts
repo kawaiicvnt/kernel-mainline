@@ -35,19 +35,6 @@
 	status = "okay";
 	samsung,burst-clock-frequency = <1368000000>;
 	samsung,pll-pmsk = <0x1 0x6f 0x2 0x5400>;
-
-	google_gs_km4: panel@0 {
-		compatible = "google,gs-km4";
-		label = "google-km4";
-		reg = <0>;
-		channel = <0>;
-		touch = <&spitouch>;
-
-		reset-gpios = <&gpp0 0 GPIO_ACTIVE_HIGH>;
-		vddio-supply = <&reg_placeholder>;
-		vci-supply = <&reg_placeholder>;
-		poc-supply = <&reg_placeholder>;
-	};
 };
 
 &drmdecon0 {
