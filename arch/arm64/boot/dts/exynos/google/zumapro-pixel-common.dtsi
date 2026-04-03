@@ -267,6 +267,7 @@
 			self-powered;
 			try-power-role = "sink";
 			op-sink-microwatt = <2600000>;
+			new-source-frs-typec-current = <FRS_5V_1P5A>;
 			slow-charger-loop;
 			/*
 			 * max77759 operating in reverse boost mode (0xA) can
@@ -320,16 +321,12 @@
 					reg = <0>;
 
 					usbc0_orien_sw: endpoint {
-						remote-endpoint = <&usbdrd31_phy_orien_switch>;
+						remote-endpoint = <&usbdrd32_phy_orien_switch>;
 					};
 				};
 
 				port@1 {
 					reg = <1>;
-
-					usbc0_role_sw: endpoint {
-						remote-endpoint = <&usbdrd31_dwc3_role_switch>;
-					};
 				};
 			};
 		};
@@ -490,39 +487,32 @@
 	status = "okay";
 };
 
-&usbdrd31 {
+&usbdrd32 {
 	vdd10-supply = <&reg_placeholder>;
 	vdd33-supply = <&reg_placeholder>;
 	status = "okay";
 };
 
-&usbdrd31_dwc3 {
-	dr_mode = "otg";
-	usb-role-switch;
-	role-switch-default-mode = "peripheral";
-	maximum-speed = "super-speed-plus";
+&usb_hsphy {
+	vdda12-supply = <&reg_placeholder>;
+	vdd-supply = <&reg_placeholder>;
 	status = "okay";
-
-	port {
-		usbdrd31_dwc3_role_switch: endpoint {
-			remote-endpoint = <&usbc0_role_sw>;
-		};
-	};
 };
 
-&usbdrd31_phy {
+&usbdrd32_dwc3 {
+	dr_mode = "peripheral";
+	usb-role-switch;
+	role-switch-default-mode = "peripheral";
+	maximum-speed = "high-speed";
+	status = "okay";
+};
+
+&usbdrd32_phy {
 	orientation-switch;
-	/* TODO: Update these once PMIC is implemented */
-	pll-supply = <&reg_placeholder>;
-	dvdd-usb20-supply = <&reg_placeholder>;
-	vddh-usb20-supply = <&reg_placeholder>;
-	vdd33-usb20-supply = <&reg_placeholder>;
-	vdda-usbdp-supply = <&reg_placeholder>;
-	vddh-usbdp-supply = <&reg_placeholder>;
 	status = "okay";
 
 	port {
-		usbdrd31_phy_orien_switch: endpoint {
+		usbdrd32_phy_orien_switch: endpoint {
 			remote-endpoint = <&usbc0_orien_sw>;
 		};
 	};

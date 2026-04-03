@@ -1386,6 +1386,40 @@ static void exynos2200_usbdrd_link_init(struct exynos5_usbdrd_phy *phy_drd)
 	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
 }
 
+static void zuma_usbdrd_link_init(struct exynos5_usbdrd_phy *phy_drd)
+{
+	void __iomem *regs_base = phy_drd->reg_phy;
+	u32 reg;
+
+	reg = readl(regs_base + EXYNOS850_DRD_LINKCTRL);
+	reg |= LINKCTRL_FORCE_QACT;
+	reg |= FIELD_PREP(LINKCTRL_BUS_FILTER_BYPASS, 0xf);
+	writel(reg, regs_base + EXYNOS850_DRD_LINKCTRL);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_CLKRST);
+	reg &= ~CLKRST_LINK_SW_RST;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+	reg &= ~(UTMICTL_FORCE_UTMI_SUSPEND | UTMICTL_FORCE_UTMI_SLEEP |
+		 UTMICTL_FORCE_DPPULLDOWN | UTMICTL_FORCE_DMPULLDOWN);
+	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
+
+	reg = readl(regs_base + EXYNOS850_DRD_HSP);
+	reg |= HSP_EN_UTMISUSPEND | HSP_COMMONONN;
+	writel(reg, regs_base + EXYNOS850_DRD_HSP);
+
+	fsleep(100);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+	reg |= EXYNOS2200_UTMI_FORCE_BVALID | EXYNOS2200_UTMI_FORCE_VBUSVALID;
+	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
+
+	reg = readl(regs_base + EXYNOS850_DRD_HSP);
+	reg |= HSP_VBUSVLDEXTSEL | HSP_VBUSVLDEXT;
+	writel(reg, regs_base + EXYNOS850_DRD_HSP);
+}
+
 static void
 exynos2200_usbdrd_link_attach_detach_pipe3_phy(struct phy_usb_instance *inst)
 {
@@ -1492,9 +1526,79 @@ static int exynos2200_usbdrd_phy_exit(struct phy *phy)
 				      phy_drd->regulators);
 }
 
+static int zuma_usbdrd_phy_init(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	int ret;
+
+	if (inst->phy_cfg->id == EXYNOS5_DRDPHY_UTMI) {
+		ret = regulator_bulk_enable(phy_drd->drv_data->n_regulators,
+					    phy_drd->regulators);
+		if (ret) {
+			dev_err(phy_drd->dev,
+				"Failed to enable PHY regulator(s)\n");
+			return ret;
+		}
+	}
+
+	exynos5_usbdrd_phy_isol(inst, false);
+
+	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
+	if (ret)
+		return ret;
+
+	zuma_usbdrd_link_init(phy_drd);
+	exynos2200_usbdrd_link_attach_detach_pipe3_phy(inst);
+	inst->phy_cfg->phy_init(phy_drd);
+	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
+
+	return 0;
+}
+
+static int zuma_usbdrd_phy_exit(struct phy *phy)
+{
+	struct phy_usb_instance *inst = phy_get_drvdata(phy);
+	struct exynos5_usbdrd_phy *phy_drd = to_usbdrd_phy(inst);
+	void __iomem *regs_base = phy_drd->reg_phy;
+	u32 reg;
+	int ret;
+
+	ret = clk_bulk_prepare_enable(phy_drd->drv_data->n_clks, phy_drd->clks);
+	if (ret)
+		return ret;
+
+	reg = readl(regs_base + EXYNOS850_DRD_HSP);
+	reg &= ~(HSP_VBUSVLDEXTSEL | HSP_VBUSVLDEXT |
+		 HSP_EN_UTMISUSPEND | HSP_COMMONONN);
+	writel(reg, regs_base + EXYNOS850_DRD_HSP);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_UTMI);
+	reg |= UTMICTL_FORCE_UTMI_SUSPEND | UTMICTL_FORCE_UTMI_SLEEP |
+	       UTMICTL_FORCE_DPPULLDOWN | UTMICTL_FORCE_DMPULLDOWN;
+	reg &= ~(EXYNOS2200_UTMI_FORCE_BVALID | EXYNOS2200_UTMI_FORCE_VBUSVALID);
+	writel(reg, regs_base + EXYNOS2200_DRD_UTMI);
+
+	reg = readl(regs_base + EXYNOS2200_DRD_CLKRST);
+	reg |= CLKRST_LINK_SW_RST;
+	writel(reg, regs_base + EXYNOS2200_DRD_CLKRST);
+
+	clk_bulk_disable_unprepare(phy_drd->drv_data->n_clks, phy_drd->clks);
+
+	exynos5_usbdrd_phy_isol(inst, true);
+	return regulator_bulk_disable(phy_drd->drv_data->n_regulators,
+				      phy_drd->regulators);
+}
+
 static const struct phy_ops exynos2200_usbdrd_phy_ops = {
 	.init		= exynos2200_usbdrd_phy_init,
 	.exit		= exynos2200_usbdrd_phy_exit,
+	.owner		= THIS_MODULE,
+};
+
+static const struct phy_ops zuma_usbdrd_phy_ops = {
+	.init		= zuma_usbdrd_phy_init,
+	.exit		= zuma_usbdrd_phy_exit,
 	.owner		= THIS_MODULE,
 };
 
@@ -1993,6 +2097,19 @@ static const char * const exynos5_regulator_names[] = {
 static const struct exynos5_usbdrd_phy_drvdata exynos2200_usb32drd_phy = {
 	.phy_cfg		= phy_cfg_exynos2200,
 	.phy_ops		= &exynos2200_usbdrd_phy_ops,
+	.pmu_offset_usbdrd0_phy	= EXYNOS2200_PHY_CTRL_USB20,
+	.clk_names		= exynos5_clk_names,
+	.n_clks			= ARRAY_SIZE(exynos5_clk_names),
+	/* clocks and regulators are specific to the underlying PHY blocks */
+	.core_clk_names		= NULL,
+	.n_core_clks		= 0,
+	.regulator_names	= NULL,
+	.n_regulators		= 0,
+};
+
+static const struct exynos5_usbdrd_phy_drvdata zuma_usb32drd_phy = {
+	.phy_cfg		= phy_cfg_exynos2200,
+	.phy_ops		= &zuma_usbdrd_phy_ops,
 	.pmu_offset_usbdrd0_phy	= EXYNOS2200_PHY_CTRL_USB20,
 	.clk_names		= exynos5_clk_names,
 	.n_clks			= ARRAY_SIZE(exynos5_clk_names),
@@ -2878,6 +2995,12 @@ static const struct of_device_id exynos5_usbdrd_phy_of_match[] = {
 	{
 		.compatible = "google,gs101-usb31drd-phy",
 		.data = &gs101_usbd31rd_phy
+	}, {
+		.compatible = "google,zuma-usb32drd-phy",
+		.data = &zuma_usb32drd_phy
+	}, {
+		.compatible = "samsung,zuma-usb32drd-phy",
+		.data = &zuma_usb32drd_phy
 	}, {
 		.compatible = "samsung,exynos2200-usb32drd-phy",
 		.data = &exynos2200_usb32drd_phy,
